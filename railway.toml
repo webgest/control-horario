@@ -1,0 +1,9 @@
+[build]
+builder = "DOCKERFILE"
+
+[deploy]
+startCommand = "node server.js"
+restartPolicyType = "ON_FAILURE"
+
+[[mounts]]
+mountPath = "/data"
