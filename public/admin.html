@@ -8,3 +8,368 @@
 :root{--primary:#1a56a0;--primary-dark:#123d7a;--primary-light:#dbeafe;--success:#16a34a;--success-light:#dcfce7;--danger:#dc2626;--danger-light:#fee2e2;--warning:#d97706;--warning-light:#fef3c7;--gray-50:#f9fafb;--gray-100:#f3f4f6;--gray-200:#e5e7eb;--gray-400:#9ca3af;--gray-600:#4b5563;--gray-700:#374151;--gray-800:#1f2937;--radius:10px;--shadow:0 2px 12px rgba(0,0,0,0.08);}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--gray-100);color:var(--gray-800);font-size:14px;}
+#screen-login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--primary-dark) 0%,var(--primary) 100%);padding:20px;}
+.login-card{background:#fff;border-radius:var(--radius);padding:40px 36px;width:100%;max-width:400px;box-shadow:0 8px 40px rgba(0,0,0,0.2);}
+.login-card h1{font-size:22px;font-weight:800;color:var(--gray-800);}.login-card p{font-size:13px;color:var(--gray-600);margin:6px 0 28px;}
+.form-group{margin-bottom:16px;}
+label{display:block;font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:5px;}
+input[type="text"],input[type="password"],input[type="date"],input[type="number"],input[type="tel"],select,textarea{width:100%;padding:10px 13px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;outline:none;transition:border-color .2s;background:var(--gray-50);font-family:inherit;}
+input:focus,select:focus,textarea:focus{border-color:var(--primary);background:#fff;}
+textarea{resize:vertical;min-height:70px;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:background .2s,opacity .2s;}
+.btn:disabled{opacity:.5;cursor:default;}
+.btn-primary{background:var(--primary);color:#fff;}.btn-primary:hover{background:var(--primary-dark);}
+.btn-success{background:var(--success);color:#fff;}.btn-danger{background:var(--danger);color:#fff;}
+.btn-outline{background:transparent;border:1.5px solid var(--gray-200);color:var(--gray-700);}.btn-outline:hover{background:var(--gray-100);}
+.btn-sm{padding:5px 10px;font-size:12px;}.btn-full{width:100%;justify-content:center;}
+.error-msg{background:var(--danger-light);color:var(--danger);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px;display:none;}
+#screen-admin{display:none;}
+.admin-layout{display:flex;min-height:100vh;}
+.sidebar{width:240px;flex-shrink:0;background:var(--primary-dark);color:#fff;display:flex;flex-direction:column;}
+.sidebar-brand{padding:20px 20px 16px;border-bottom:1px solid rgba(255,255,255,0.1);}
+.sidebar-brand h2{font-size:16px;font-weight:800;}.sidebar-brand p{font-size:11px;opacity:.7;margin-top:2px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:13px 20px;cursor:pointer;transition:background .15s;font-size:13px;font-weight:500;border-left:3px solid transparent;}
+.nav-item:hover{background:rgba(255,255,255,0.08);}.nav-item.active{background:rgba(255,255,255,0.12);border-left-color:#fff;font-weight:700;}
+.nav-icon{font-size:16px;}.nav-divider{height:1px;background:rgba(255,255,255,0.1);margin:8px 0;}
+.sidebar-footer{margin-top:auto;padding:16px 20px;border-top:1px solid rgba(255,255,255,0.1);}
+.sidebar-footer .admin-name{font-size:12px;opacity:.8;margin-bottom:8px;}
+.main-content{flex:1;overflow-y:auto;background:var(--gray-100);}
+.page-header{background:#fff;padding:18px 28px;border-bottom:1px solid var(--gray-200);display:flex;align-items:center;justify-content:space-between;box-shadow:var(--shadow);}
+.page-header h1{font-size:20px;font-weight:700;}.page-header .fecha-hoy{font-size:13px;color:var(--gray-600);}
+.content-area{padding:24px 28px;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:24px;}
+.stat-card{background:#fff;border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);}
+.stat-card .num{font-size:28px;font-weight:800;}.stat-card .lbl{font-size:12px;color:var(--gray-600);margin-top:2px;}
+.num-green{color:var(--success);}.num-blue{color:var(--primary);}.num-orange{color:var(--warning);}.num-red{color:var(--danger);}.num-gray{color:var(--gray-400);}
+.card{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:20px;}
+.card-header{padding:14px 20px;border-bottom:1px solid var(--gray-200);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+.card-header h3{font-size:15px;font-weight:700;}
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:left;padding:10px 14px;background:var(--gray-50);color:var(--gray-600);font-weight:600;font-size:12px;border-bottom:1px solid var(--gray-200);white-space:nowrap;}
+td{padding:10px 14px;border-bottom:1px solid var(--gray-100);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}tr:hover td{background:var(--gray-50);}
+.badge{display:inline-block;padding:3px 9px;border-radius:99px;font-size:11px;font-weight:600;white-space:nowrap;}
+.badge-green{background:var(--success-light);color:var(--success);}.badge-blue{background:var(--primary-light);color:var(--primary);}
+.badge-orange{background:var(--warning-light);color:var(--warning);}.badge-red{background:var(--danger-light);color:var(--danger);}.badge-gray{background:var(--gray-100);color:var(--gray-600);}
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;padding:14px 20px;background:var(--gray-50);border-bottom:1px solid var(--gray-200);}
+.filter-group{display:flex;flex-direction:column;gap:4px;}
+.filter-group label{font-size:11px;font-weight:600;color:var(--gray-600);}
+.filter-group select,.filter-group input{width:auto;min-width:140px;padding:7px 10px;}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;}
+.modal{background:#fff;border-radius:var(--radius);width:100%;max-width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.2);}
+.modal-header{padding:18px 22px;border-bottom:1px solid var(--gray-200);display:flex;align-items:center;justify-content:space-between;}
+.modal-header h2{font-size:16px;font-weight:700;}.btn-close{background:none;border:none;font-size:22px;cursor:pointer;color:var(--gray-600);line-height:1;}
+.modal-body{padding:20px 22px;}.modal-footer{padding:14px 22px;border-top:1px solid var(--gray-200);display:flex;gap:8px;justify-content:flex-end;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--gray-800);color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;z-index:9999;box-shadow:var(--shadow);opacity:0;transition:opacity .3s;pointer-events:none;}
+.toast.show{opacity:1;}.alert-row td{background:var(--warning-light)!important;}
+@media(max-width:800px){.sidebar{width:200px;}.content-area{padding:16px;}}
+@media(max-width:600px){.admin-layout{flex-direction:column;}.sidebar{width:100%;height:auto;}.content-area{padding:12px;}}
+.page{display:none;}.page.active{display:block;}
+.empty-state{text-align:center;padding:40px;color:var(--gray-400);}.spinner{text-align:center;padding:30px;color:var(--gray-400);}
+.pendiente-icon{color:var(--warning);font-size:11px;}
+</style>
+</head>
+<body>
+<div id="screen-login">
+  <div class="login-card">
+    <h1>Acceso Webgest</h1>
+    <p>Panel de administracion - Control Horario</p>
+    <div id="login-error" class="error-msg"></div>
+    <div class="form-group">
+      <label>Contrasena</label>
+      <input type="password" id="inp-pass" autocomplete="current-password" placeholder="Webgest2026!" autofocus>
+    </div>
+    <button class="btn btn-primary btn-full" id="btn-login-admin" onclick="doAdminLogin()">Entrar al panel</button>
+  </div>
+</div>
+<div id="screen-admin">
+<div class="admin-layout">
+  <aside class="sidebar">
+    <div class="sidebar-brand"><h2>Control Horario</h2><p>Panel Webgest</p></div>
+    <nav>
+      <div class="nav-item active" onclick="navTo('dashboard')"><span class="nav-icon">D</span> Dashboard</div>
+      <div class="nav-item" onclick="navTo('fichajes')"><span class="nav-icon">F</span> Fichajes</div>
+      <div class="nav-item" onclick="navTo('trabajadoras')"><span class="nav-icon">T</span> Trabajadoras</div>
+      <div class="nav-item" onclick="navTo('informes')"><span class="nav-icon">P</span> Informes PDF</div>
+      <div class="nav-divider"></div>
+      <div class="nav-item" onclick="navTo('auditoria')"><span class="nav-icon">A</span> Auditoria</div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="admin-name" id="admin-name-display">--</div>
+      <button class="btn btn-outline btn-sm" onclick="doAdminLogout()" style="color:#fff;border-color:rgba(255,255,255,0.4);">Cerrar sesion</button>
+    </div>
+  </aside>
+  <main class="main-content">
+    <div class="page-header">
+      <div><h1 id="page-title">Dashboard</h1><div class="fecha-hoy" id="fecha-display">--</div></div>
+      <button class="btn btn-outline btn-sm" onclick="refreshPage()">Actualizar</button>
+    </div>
+    <div class="content-area">
+      <div class="page active" id="page-dashboard"><div id="dashboard-content"><div class="spinner">Cargando...</div></div></div>
+      <div class="page" id="page-fichajes">
+        <div class="card">
+          <div class="card-header"><h3>Historial de fichajes</h3></div>
+          <div class="filters">
+            <div class="filter-group"><label>Empresa</label><select id="filt-empresa" onchange="loadFichajesPage()"><option value="">Todas</option></select></div>
+            <div class="filter-group"><label>Desde</label><input type="date" id="filt-desde" onchange="loadFichajesPage()"></div>
+            <div class="filter-group"><label>Hasta</label><input type="date" id="filt-hasta" onchange="loadFichajesPage()"></div>
+            <button class="btn btn-outline btn-sm" onclick="clearFiltros()">Limpiar</button>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>Empresa</th><th>Trabajadora</th><th>DNI</th><th>Fecha</th><th>Entrada</th><th>Salida</th><th>Horas</th><th>Estado</th><th></th></tr></thead><tbody id="fichajes-tbody"><tr><td colspan="9" class="empty-state">Selecciona filtros</td></tr></tbody></table></div>
+        </div>
+      </div>
+      <div class="page" id="page-trabajadoras">
+        <div class="card">
+          <div class="card-header"><h3>Gestion de trabajadoras</h3><button class="btn btn-primary btn-sm" onclick="openModalNuevaTrabajadora()">+ Nueva trabajadora</button></div>
+          <div class="filters">
+            <div class="filter-group"><label>Empresa</label><select id="trab-filt-empresa" onchange="loadTrabajadorasPage()"><option value="">Todas</option></select></div>
+            <div class="filter-group"><label>Estado</label><select id="trab-filt-estado" onchange="loadTrabajadorasPage()"><option value="">Todos</option><option value="activa">Activa</option><option value="IT">IT</option><option value="baja">Baja</option></select></div>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>DNI</th><th>Empresa</th><th>H/dia</th><th>Estado</th><th></th></tr></thead><tbody id="trab-tbody"><tr><td colspan="6" class="spinner">Cargando...</td></tr></tbody></table></div>
+        </div>
+      </div>
+      <div class="page" id="page-informes">
+        <div class="card">
+          <div class="card-header"><h3>Exportar Registro de Jornada (RD-ley 8/2019)</h3></div>
+          <div style="padding:24px;">
+            <div class="form-row" style="max-width:500px;margin-bottom:16px;">
+              <div class="form-group"><label>Empresa</label><select id="inf-empresa" onchange="loadInfTrabajadoras()"><option value="">Selecciona empresa</option></select></div>
+              <div class="form-group"><label>Trabajadora</label><select id="inf-trabajadora"><option value="">Selecciona empresa primero</option></select></div>
+            </div>
+            <div class="form-row" style="max-width:300px;margin-bottom:20px;">
+              <div class="form-group"><label>Anio</label><input type="number" id="inf-anio" value="2026" min="2024" max="2030"></div>
+              <div class="form-group"><label>Mes</label><select id="inf-mes"><option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option><option value="4">Abril</option><option value="5">Mayo</option><option value="6" selected>Junio</option><option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select></div>
+            </div>
+            <button class="btn btn-primary" onclick="descargarPDF()">Descargar PDF</button>
+          </div>
+        </div>
+      </div>
+      <div class="page" id="page-auditoria">
+        <div class="card">
+          <div class="card-header"><h3>Log de auditoria</h3></div>
+          <div class="table-wrap"><table><thead><tr><th>Fecha/Hora</th><th>Admin</th><th>Accion</th><th>Tabla</th><th>ID</th></tr></thead><tbody id="audit-tbody"><tr><td colspan="5" class="spinner">Cargando...</td></tr></tbody></table></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</div>
+<div class="modal-backdrop" id="modal-trabajadora" style="display:none;" onclick="closeModalIfBackdrop(event,'modal-trabajadora')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header"><h2 id="modal-trab-title">Trabajadora</h2><button class="btn-close" onclick="closeModal('modal-trabajadora')">X</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="mt-id">
+      <div class="form-row">
+        <div class="form-group" style="grid-column:1/-1"><label>Nombre *</label><input type="text" id="mt-nombre"></div>
+        <div class="form-group"><label>DNI/NIE *</label><input type="text" id="mt-dni"></div>
+        <div class="form-group"><label>Empresa *</label><select id="mt-empresa"></select></div>
+        <div class="form-group"><label>Telefono SMS</label><input type="tel" id="mt-telefono" placeholder="+34600000000"></div>
+        <div class="form-group"><label>Tipo jornada</label><select id="mt-tipo"><option value="completa">Completa</option><option value="parcial">Parcial</option></select></div>
+        <div class="form-group"><label>Horas/dia *</label><input type="number" id="mt-horas" step="0.01" min="0.5" max="10"></div>
+        <div class="form-group"><label>Dias/mes</label><input type="number" id="mt-dias" min="1" max="31" value="30"></div>
+        <div class="form-group"><label>Estado</label><select id="mt-estado"><option value="activa">Activa</option><option value="IT">IT</option><option value="baja">Baja</option><option value="vacaciones">Vacaciones</option></select></div>
+        <div class="form-group" style="grid-column:1/-1"><label>Observaciones</label><textarea id="mt-obs"></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-trabajadora')">Cancelar</button>
+      <button class="btn btn-danger btn-sm" id="btn-baja-trab" onclick="darDeBaja()" style="display:none;">Dar de baja</button>
+      <button class="btn btn-primary" onclick="saveTrabajadora()">Guardar</button>
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop" id="modal-fichaje" style="display:none;" onclick="closeModalIfBackdrop(event,'modal-fichaje')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header"><h2>Corregir fichaje</h2><button class="btn-close" onclick="closeModal('modal-fichaje')">X</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="mf-id">
+      <div class="form-row">
+        <div class="form-group"><label>Hora entrada</label><input type="text" id="mf-entrada" placeholder="2026-06-11 08:00:00"></div>
+        <div class="form-group"><label>Hora salida</label><input type="text" id="mf-salida"></div>
+      </div>
+      <div class="form-group"><label>Observaciones</label><input type="text" id="mf-obs"></div>
+      <div class="form-group"><label>Motivo (min 5 caracteres) *</label><textarea id="mf-razon"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-fichaje')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveFichaje()">Guardar correccion</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="admin-toast"></div>
+<script>
+'use strict';
+const API='';
+let adminToken=sessionStorage.getItem('admin_token');
+let adminData=null,empresasCache=[],currentPage='dashboard';
+(function init(){
+  if(adminToken){try{const p=JSON.parse(atob(adminToken.split('.')[1]));if(p.exp*1000>Date.now()&&p.role==='admin'){adminData=p;showAdmin();return;}}catch{}}
+  adminToken=null;sessionStorage.removeItem('admin_token');
+})();
+async function doAdminLogin(){
+  const password=document.getElementById('inp-pass').value;setLoginErr('');
+  if(!password){setLoginErr('Introduce la contrasena.');return;}
+  const btn=document.getElementById('btn-login-admin');btn.disabled=true;btn.textContent='Verificando...';
+  try{
+    const resp=await apiFetch('/api/auth/admin/login','POST',{username:'webgest',password});
+    adminToken=resp.token;sessionStorage.setItem('admin_token',adminToken);adminData=JSON.parse(atob(adminToken.split('.')[1]));showAdmin();
+  }catch(e){setLoginErr(e.message||'Contrasena incorrecta.');btn.disabled=false;btn.textContent='Entrar al panel';}
+}
+function doAdminLogout(){adminToken=null;adminData=null;sessionStorage.removeItem('admin_token');document.getElementById('screen-admin').style.display='none';document.getElementById('screen-login').style.display='flex';}
+function setLoginErr(msg){const el=document.getElementById('login-error');el.textContent=msg;el.style.display=msg?'block':'none';}
+async function showAdmin(){
+  document.getElementById('screen-login').style.display='none';document.getElementById('screen-admin').style.display='block';
+  document.getElementById('admin-name-display').textContent=adminData.nombre||adminData.username;
+  document.getElementById('fecha-display').textContent=new Date().toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  empresasCache=await apiFetch('/api/admin/empresas');populateEmpresaSelects();loadPage('dashboard');
+}
+function navTo(page){document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));event.currentTarget.classList.add('active');loadPage(page);}
+function loadPage(page){
+  currentPage=page;
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  const titles={dashboard:'Dashboard',fichajes:'Fichajes',trabajadoras:'Trabajadoras',informes:'Informes PDF',auditoria:'Auditoria'};
+  document.getElementById('page-title').textContent=titles[page]||page;
+  switch(page){case 'dashboard':loadDashboard();break;case 'trabajadoras':loadTrabajadorasPage();break;case 'fichajes':loadFichajesPage();break;case 'auditoria':loadAuditoria();break;}
+}
+function refreshPage(){loadPage(currentPage);}
+async function loadDashboard(){
+  const cont=document.getElementById('dashboard-content');cont.innerHTML='<div class="spinner">Cargando...</div>';
+  try{renderDashboard(await apiFetch('/api/admin/dashboard'));}catch(e){cont.innerHTML='<p style="color:var(--danger)">Error: '+e.message+'</p>';}
+}
+function renderDashboard(data){
+  let tT=0,tF=0,tC=0,tS=0,tI=0;
+  data.empresas.forEach(e=>{tT+=e.stats.total;tF+=e.stats.fichadas;tC+=e.stats.jornada_completada;tS+=e.stats.sin_fichar;tI+=e.stats.it_baja;});
+  let html='<div class="stats-grid"><div class="stat-card"><div class="num num-blue">'+tT+'</div><div class="lbl">Total trabajadoras</div></div><div class="stat-card"><div class="num num-blue">'+tF+'</div><div class="lbl">En jornada ahora</div></div><div class="stat-card"><div class="num num-green">'+tC+'</div><div class="lbl">Jornada completada</div></div><div class="stat-card"><div class="num num-orange">'+tS+'</div><div class="lbl">Sin fichar hoy</div></div><div class="stat-card"><div class="num num-gray">'+tI+'</div><div class="lbl">IT/Baja/Vacac.</div></div></div>';
+  data.empresas.forEach(function(item){
+    const empresa=item.empresa,stats=item.stats,trabajadoras=item.trabajadoras;
+    html+='<div class="card" style="margin-bottom:20px;"><div class="card-header"><div><h3>'+empresa.nombre+'</h3><small style="color:var(--gray-600);">'+empresa.nif+' | CCC: '+empresa.ccc+'</small></div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+(stats.alerta>0?'<span class="badge badge-orange">'+stats.alerta+' sin fichar</span>':'')+'<span class="badge badge-blue">'+stats.fichadas+' en jornada</span><span class="badge badge-green">'+stats.jornada_completada+' completadas</span><span class="badge badge-gray">'+stats.it_baja+' IT/baja</span></div></div><div class="table-wrap"><table><thead><tr><th>Trabajadora</th><th>Estado</th><th>Entrada</th><th>Fin previsto</th><th>Salida</th><th>Horas</th></tr></thead><tbody>';
+    trabajadoras.forEach(function(t){
+      let eb='',rc='';
+      if(t.estado==='IT')eb='<span class="badge badge-orange">IT</span>';
+      else if(t.estado==='baja')eb='<span class="badge badge-red">Baja</span>';
+      else if(t.estado==='vacaciones')eb='<span class="badge badge-gray">Vacaciones</span>';
+      else if(t.hora_salida)eb='<span class="badge badge-green">Completada</span>';
+      else if(t.hora_entrada)eb='<span class="badge badge-blue">En jornada</span>';
+      else{eb='<span class="badge badge-orange">Sin fichar</span>';rc='alert-row';}
+      let fp='--';if(t.hora_entrada&&!t.hora_salida){fp=new Date(new Date(t.hora_entrada).getTime()+t.horas_dia*3600000).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});}
+      const pend=t.horas_pendientes_confirmar?'<span class="pendiente-icon"> !</span>':'';
+      html+='<tr class="'+rc+'"><td><strong>'+t.nombre+'</strong> <small style="color:var(--gray-400);">'+t.dni+'</small>'+pend+'</td><td>'+eb+'</td><td>'+fmtH(t.hora_entrada)+'</td><td>'+fp+'</td><td>'+fmtH(t.hora_salida)+'</td><td>'+(t.horas_trabajadas?decHM(t.horas_trabajadas):'--')+'</td></tr>';
+    });
+    html+='</tbody></table></div></div>';
+  });
+  document.getElementById('dashboard-content').innerHTML=html;
+}
+function clearFiltros(){['filt-empresa','filt-desde','filt-hasta'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.getElementById('fichajes-tbody').innerHTML='<tr><td colspan="9" class="empty-state">Selecciona filtros</td></tr>';}
+async function loadFichajesPage(){
+  const ei=document.getElementById('filt-empresa').value,de=document.getElementById('filt-desde').value,ha=document.getElementById('filt-hasta').value;
+  if(!ei&&!de&&!ha)return;
+  const p=new URLSearchParams();if(ei)p.set('empresa_id',ei);if(de)p.set('fecha_inicio',de);if(ha)p.set('fecha_fin',ha);
+  const tbody=document.getElementById('fichajes-tbody');tbody.innerHTML='<tr><td colspan="9" class="spinner">Cargando...</td></tr>';
+  try{
+    const data=await apiFetch('/api/admin/fichajes?'+p);
+    if(!data.length){tbody.innerHTML='<tr><td colspan="9" class="empty-state">Sin registros</td></tr>';return;}
+    tbody.innerHTML=data.map(f=>'<tr><td>'+f.empresa_nombre+'</td><td><strong>'+f.trabajadora_nombre+'</strong></td><td style="font-family:monospace;font-size:12px;">'+f.dni+'</td><td>'+fmtFecha(f.fecha)+'</td><td>'+fmtH(f.hora_entrada)+'</td><td>'+fmtH(f.hora_salida)+'</td><td>'+(f.horas_trabajadas?decHM(f.horas_trabajadas):'--')+'</td><td>'+(f.cerrado_automaticamente?'<span class="badge badge-gray">Auto</span>':'')+(f.modificado_por?'<span class="badge badge-orange">Corr</span>':'')+'</td><td><button class="btn btn-outline btn-sm" onclick="openModalFichaje2('+f.id+',''+f.hora_entrada+'',''+f.hora_salida+'',''+f.observaciones+'')">Editar</button></td></tr>').join('');
+  }catch(e){tbody.innerHTML='<tr><td colspan="9" style="color:var(--danger);padding:16px;">Error: '+e.message+'</td></tr>';}
+}
+async function loadTrabajadorasPage(){
+  const ef=document.getElementById('trab-filt-empresa')?document.getElementById('trab-filt-empresa').value:'',sf=document.getElementById('trab-filt-estado')?document.getElementById('trab-filt-estado').value:'';
+  const tbody=document.getElementById('trab-tbody');tbody.innerHTML='<tr><td colspan="6" class="spinner">Cargando...</td></tr>';
+  try{
+    let data=await apiFetch('/api/admin/trabajadoras');
+    if(ef)data=data.filter(t=>String(t.empresa_id)===ef);if(sf)data=data.filter(t=>t.estado===sf);
+    if(!data.length){tbody.innerHTML='<tr><td colspan="6" class="empty-state">Sin resultados</td></tr>';return;}
+    const badges={activa:'<span class="badge badge-green">Activa</span>',IT:'<span class="badge badge-orange">IT</span>',baja:'<span class="badge badge-red">Baja</span>',vacaciones:'<span class="badge badge-gray">Vacaciones</span>'};
+    tbody.innerHTML=data.map(t=>'<tr><td><strong>'+t.nombre+'</strong>'+(t.horas_pendientes_confirmar?'<span class="pendiente-icon"> !</span>':'')+'</td><td style="font-family:monospace;font-size:12px;">'+t.dni+'</td><td>'+t.empresa_nombre+'</td><td>'+decHM(t.horas_dia)+'</td><td>'+(badges[t.estado]||t.estado)+'</td><td><button class="btn btn-outline btn-sm" onclick="openModalEditTrab('+t.id+')">Editar</button></td></tr>').join('');
+  }catch(e){tbody.innerHTML='<tr><td colspan="6" style="color:var(--danger);padding:16px;">Error: '+e.message+'</td></tr>';}
+}
+function populateEmpresaSelects(){
+  ['mt-empresa','inf-empresa'].forEach(id=>{const el=document.getElementById(id);if(!el)return;el.innerHTML='<option value="">-- Selecciona --</option>'+empresasCache.map(e=>'<option value="'+e.id+'">'+e.nombre+'</option>').join('');});
+  ['filt-empresa','trab-filt-empresa'].forEach(id=>{const el=document.getElementById(id);if(!el)return;el.innerHTML='<option value="">Todas</option>'+empresasCache.map(e=>'<option value="'+e.id+'">'+e.nombre+'</option>').join('');});
+}
+function openModalNuevaTrabajadora(){
+  document.getElementById('modal-trab-title').textContent='Nueva trabajadora';
+  document.getElementById('mt-id').value='';
+  ['mt-nombre','mt-telefono','mt-obs'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('mt-dni').value='';document.getElementById('mt-dni').disabled=false;
+  document.getElementById('mt-empresa').value='';document.getElementById('mt-tipo').value='completa';document.getElementById('mt-horas').value='8.30';document.getElementById('mt-dias').value='30';document.getElementById('mt-estado').value='activa';document.getElementById('btn-baja-trab').style.display='none';
+  openModal('modal-trabajadora');
+}
+async function openModalEditTrab(id){
+  try{
+    const t=await apiFetch('/api/admin/trabajadoras/'+id);
+    document.getElementById('modal-trab-title').textContent='Editar: '+t.nombre;
+    document.getElementById('mt-id').value=t.id;document.getElementById('mt-nombre').value=t.nombre;document.getElementById('mt-dni').value=t.dni;document.getElementById('mt-dni').disabled=true;
+    document.getElementById('mt-empresa').value=t.empresa_id;document.getElementById('mt-telefono').value=t.telefono||'';document.getElementById('mt-tipo').value=t.tipo_jornada;document.getElementById('mt-horas').value=t.horas_dia;document.getElementById('mt-dias').value=t.dias_mes;document.getElementById('mt-estado').value=t.estado;document.getElementById('mt-obs').value=t.observaciones||'';document.getElementById('btn-baja-trab').style.display='inline-flex';
+    openModal('modal-trabajadora');
+  }catch(e){showToast('Error: '+e.message,true);}
+}
+async function saveTrabajadora(){
+  const id=document.getElementById('mt-id').value,nombre=document.getElementById('mt-nombre').value.trim(),dni=document.getElementById('mt-dni').value.trim().toUpperCase(),emp=document.getElementById('mt-empresa').value,tel=document.getElementById('mt-telefono').value.trim(),tipo=document.getElementById('mt-tipo').value,horas=document.getElementById('mt-horas').value,dias=document.getElementById('mt-dias').value,estado=document.getElementById('mt-estado').value,obs=document.getElementById('mt-obs').value.trim();
+  if(!nombre||!horas){showToast('Nombre y horas obligatorios.',true);return;}
+  try{
+    if(id){await apiFetch('/api/admin/trabajadoras/'+id,'PUT',{nombre,telefono:tel||null,horas_dia:parseFloat(horas),dias_mes:parseInt(dias),tipo_jornada:tipo,estado,observaciones:obs||null});}
+    else{if(!dni||!emp){showToast('DNI y empresa obligatorios.',true);return;}await apiFetch('/api/admin/trabajadoras','POST',{empresa_id:parseInt(emp),nombre,dni,telefono:tel||null,horas_dia:parseFloat(horas),dias_mes:parseInt(dias),tipo_jornada:tipo,estado,observaciones:obs||null});}
+    showToast('Guardado correctamente');closeModal('modal-trabajadora');loadTrabajadorasPage();
+  }catch(e){showToast('Error: '+e.message,true);}
+}
+async function darDeBaja(){
+  const id=document.getElementById('mt-id').value;if(!id)return;
+  if(!confirm('Confirmar baja?'))return;
+  try{await apiFetch('/api/admin/trabajadoras/'+id,'DELETE');showToast('Dada de baja');closeModal('modal-trabajadora');loadTrabajadorasPage();}
+  catch(e){showToast('Error: '+e.message,true);}
+}
+function openModalFichaje2(id,entrada,salida,obs){
+  document.getElementById('mf-id').value=id;document.getElementById('mf-entrada').value=entrada||'';document.getElementById('mf-salida').value=salida||'';document.getElementById('mf-obs').value=obs||'';document.getElementById('mf-razon').value='';openModal('modal-fichaje');
+}
+async function saveFichaje(){
+  const id=document.getElementById('mf-id').value,entrada=document.getElementById('mf-entrada').value.trim(),salida=document.getElementById('mf-salida').value.trim(),obs=document.getElementById('mf-obs').value.trim(),razon=document.getElementById('mf-razon').value.trim();
+  if(!razon||razon.length<5){showToast('Motivo obligatorio (min 5 caracteres).',true);return;}
+  try{await apiFetch('/api/admin/fichajes/'+id,'PUT',{hora_entrada:entrada||undefined,hora_salida:salida||undefined,observaciones:obs||undefined,razon});showToast('Fichaje corregido');closeModal('modal-fichaje');loadFichajesPage();}
+  catch(e){showToast('Error: '+e.message,true);}
+}
+async function loadInfTrabajadoras(){
+  const empId=document.getElementById('inf-empresa').value,sel=document.getElementById('inf-trabajadora');
+  if(!empId){sel.innerHTML='<option value="">Selecciona empresa primero</option>';return;}
+  try{const data=await apiFetch('/api/admin/empresas/'+empId+'/trabajadoras');sel.innerHTML='<option value="">-- Selecciona --</option>'+data.map(t=>'<option value="'+t.id+'">'+t.nombre+' ('+t.dni+')</option>').join('');}
+  catch(e){sel.innerHTML='<option value="">Error</option>';}
+}
+async function descargarPDF(){
+  const tid=document.getElementById('inf-trabajadora').value,anio=document.getElementById('inf-anio').value,mes=document.getElementById('inf-mes').value;
+  if(!tid){showToast('Selecciona trabajadora.',true);return;}
+  try{
+    const resp=await fetch('/api/admin/informe-pdf/'+tid+'/'+anio+'/'+mes,{headers:{'Authorization':'Bearer '+adminToken}});
+    if(!resp.ok){const j=await resp.json();throw new Error(j.error||'Error');}
+    const blob=await resp.blob(),blobUrl=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=blobUrl;a.download='registro_jornada.pdf';a.click();URL.revokeObjectURL(blobUrl);showToast('PDF descargado');
+  }catch(e){showToast('Error: '+e.message,true);}
+}
+async function loadAuditoria(){
+  const tbody=document.getElementById('audit-tbody');tbody.innerHTML='<tr><td colspan="5" class="spinner">Cargando...</td></tr>';
+  try{
+    const data=await apiFetch('/api/admin/audit');
+    if(!data.length){tbody.innerHTML='<tr><td colspan="5" class="empty-state">Sin registros</td></tr>';return;}
+    tbody.innerHTML=data.map(r=>'<tr><td style="font-size:12px;white-space:nowrap;">'+r.created_at+'</td><td><strong>'+r.admin_username+'</strong></td><td><span class="badge badge-blue">'+r.accion+'</span></td><td>'+(r.tabla||'--')+'</td><td>'+(r.registro_id||'--')+'</td></tr>').join('');
+  }catch(e){tbody.innerHTML='<tr><td colspan="5" style="color:var(--danger);padding:16px;">Error: '+e.message+'</td></tr>';}
+}
+function fmtH(iso){if(!iso)return'--';return String(iso).slice(11,16);}
+function fmtFecha(d){if(!d)return'--';return new Date(d+'T12:00:00').toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'});}
+function decHM(h){if(h==null)return'--';const ho=Math.floor(h),mi=Math.round((h-ho)*60);return ho+'h '+String(mi).padStart(2,'0')+'m';}
+async function apiFetch(url,method,body){
+  if(!method)method='GET';
+  const opts={method:method,headers:{'Content-Type':'application/json'}};
+  if(adminToken)opts.headers['Authorization']='Bearer '+adminToken;
+  if(body!==undefined)opts.body=JSON.stringify(body);
+  const resp=await fetch(API+url,opts);const json=await resp.json();
+  if(!resp.ok)throw new Error(json.error||'Error '+resp.status);return json;
+}
+function openModal(id){document.getElementById(id).style.display='flex';}
+function closeModal(id){document.getElementById(id).style.display='none';}
+function closeModalIfBackdrop(event,id){if(event.target===document.getElementById(id))closeModal(id);}
+function showToast(msg,isError){const t=document.getElementById('admin-toast');t.textContent=msg;t.style.background=isError?'var(--danger)':'var(--success)';t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3000);}
+document.getElementById('inp-pass').addEventListener('keydown',function(e){if(e.key==='Enter')doAdminLogin();});
+</script>
+</body>
+</html>
