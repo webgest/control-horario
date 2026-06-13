@@ -68,6 +68,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 #wl .wic{font-size:60px;margin-bottom:20px}
 #wl h2{font-size:24px;font-weight:800;margin-bottom:10px}
 #wl p{font-size:15px;opacity:.85;line-height:1.6}
+  .card-en-pausa{background:var(--warning-light);border:2px solid var(--warning);}
+  #btn-pausa{width:100%;padding:18px;background:var(--warning);color:#fff;border:none;border-radius:var(--radius);font-size:18px;font-weight:800;cursor:pointer;margin-top:12px;}
+  #btn-reanudar{width:100%;padding:18px;background:var(--success);color:#fff;border:none;border-radius:var(--radius);font-size:18px;font-weight:800;cursor:pointer;margin-top:12px;}
+  .pausa-badge{display:inline-block;background:var(--warning);color:#fff;padding:6px 18px;border-radius:99px;font-size:14px;font-weight:700;margin-bottom:8px;}
 </style>
 </head>
 <body>
@@ -207,7 +211,7 @@ function renderEst(d){
     c.className='ec cc';
     c.innerHTML='<div class="ei2">✅</div><div class="et">¡Jornada completada!</div><div class="es2">Entrada: <strong>'+fH(d.fichaje.hora_entrada)+'</strong> · Salida: <strong>'+fH(d.fichaje.hora_salida)+'</strong><br>Total: <strong>'+dHM(d.fichaje.horas_trabajadas)+'</strong></div><div style="color:var(--s);font-size:15px;font-weight:700">¡Hasta mañana! 🙌</div>';
     if(ci)clearInterval(ci);
-  }else if(d.estado==='en_jornada'){
+  }else if(data.estado==='en_pausa'){card.className='estado-card card-en-pausa';card.innerHTML='<div class=estado-icon>⏸️</div><div class=estado-title>En pausa</div><div class=estado-sub>Inicio: <b>'+fmtH(data.fichaje.hora_entrada)+'</b></div><div class=pausa-badge>⏸ PAUSA ACTIVA</div><div class=hora-fin-badge id=fin-badge style=background:var(--warning)>'+(data.hora_fin_display||'—')+'</div><div class=countdown-sub id=fin-countdown>Fin previsto (pausas incluidas)</div><button id=btn-reanudar onclick=doReanudar()>▶ REANUDAR JORNADA</button>';startCountdown(data.hora_fin_prevista);}else if(d.estado==='en_jornada'){
     c.className='ec cj';
     c.innerHTML='<div class="ei2">⏱️</div><div class="et">En jornada</div><div class="es2">Inicio: <strong>'+fH(d.fichaje.hora_entrada)+'</strong></div><div class="hb" id="fb">'+d.hora_fin_display+'</div><div class="cs" id="fc">Hora de fin</div>';
     startCD(d.hora_fin_prevista);
@@ -266,6 +270,9 @@ async function apiFetch(url,method,body){
 function showToast(msg,err){
   var t=document.getElementById('tst');t.textContent=msg;t.style.background=err?'var(--d)':'var(--g8)';t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3500);
 }
+
+async function doPausa(){var btn=document.getElementById('btn-pausa');if(btn){btn.disabled=true;btn.textContent='Registrando...';}try{var d=await apiFetch('/api/fichar/pausa','POST',{});showToast(d.mensaje||'Pausa iniciada.');renderEstado(d);}catch(e){showToast(e.message||'Error',true);if(btn){btn.disabled=false;btn.textContent='⏸ PAUSA (descanso / comida)';}}}
+async function doReanudar(){var btn=document.getElementById('btn-reanudar');if(btn){btn.disabled=true;btn.textContent='Reanudando...';}try{var d=await apiFetch('/api/fichar/reanudar','POST',{});showToast(d.mensaje||'¡Bienvenida!');renderEstado(d);}catch(e){showToast(e.message||'Error',true);if(btn){btn.disabled=false;btn.textContent='▶ REANUDAR JORNADA';}}}
 </script>
 </body>
 </html>
