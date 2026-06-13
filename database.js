@@ -42,6 +42,17 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT, fichaje_id INTEGER NOT NULL, inicio DATETIME NOT NULL, fin DATETIME,
     FOREIGN KEY (fichaje_id) REFERENCES fichajes(id)
   );
+
+
+  CREATE TABLE IF NOT EXISTS pausas (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    fichaje_id   INTEGER NOT NULL,
+    inicio       DATETIME NOT NULL,
+    fin          DATETIME,
+    FOREIGN KEY (fichaje_id) REFERENCES fichajes(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_pausas_fichaje ON pausas(fichaje_id);
   CREATE INDEX IF NOT EXISTS idx_fichajes_trabajadora_fecha ON fichajes(trabajadora_id, fecha);
   CREATE INDEX IF NOT EXISTS idx_trabajadoras_dni ON trabajadoras(dni);
   CREATE INDEX IF NOT EXISTS idx_pausas_fichaje ON pausas(fichaje_id);
@@ -150,6 +161,11 @@ const queries = {
   insertPausa:     db.prepare("INSERT INTO pausas (fichaje_id,inicio) VALUES (?,datetime('now','localtime'))"),
   cerrarPausa:     db.prepare("UPDATE pausas SET fin=datetime('now','localtime') WHERE fichaje_id=? AND fin IS NULL"),
   getTotalPausasH: db.prepare("SELECT COALESCE(SUM((julianday(COALESCE(fin,datetime('now','localtime')))-julianday(inicio))*24),0) AS total FROM pausas WHERE fichaje_id=?"),
+  getPausaActiva:  db.prepare("SELECT * FROM pausas WHERE fichaje_id = ? AND fin IS NULL ORDER BY id DESC LIMIT 1"),
+  getPausas:       db.prepare("SELECT * FROM pausas WHERE fichaje_id = ? ORDER BY inicio ASC"),
+  insertPausa:     db.prepare("INSERT INTO pausas (fichaje_id, inicio) VALUES (?, datetime('now','localtime'))"),
+  cerrarPausa:     db.prepare("UPDATE pausas SET fin = datetime('now','localtime') WHERE fichaje_id = ? AND fin IS NULL"),
+  getTotalPausasH: db.prepare("SELECT COALESCE(SUM((julianday(COALESCE(fin,datetime('now','localtime')))-julianday(inicio))*24),0) AS total FROM pausas WHERE fichaje_id = ?"),
   getInformeMensual: db.prepare("SELECT f.fecha,f.hora_entrada,f.hora_salida,f.horas_trabajadas,f.cerrado_automaticamente,f.observaciones,f.modificado_por,f.razon_modificacion,t.nombre AS trabajadora_nombre,t.dni,t.tipo_jornada,t.horas_dia,e.nombre AS empresa_nombre,e.nif AS empresa_nif,e.ccc FROM fichajes f JOIN trabajadoras t ON f.trabajadora_id=t.id JOIN empresas e ON t.empresa_id=e.id WHERE f.trabajadora_id=? AND strftime('%Y-%m',f.fecha)=? ORDER BY f.fecha ASC"),
 };
 
