@@ -45,6 +45,33 @@ app.post('/api/fichar/entrada',authW,(req,res)=>{
   const fin=calcularHoraFin(fichaje.hora_entrada,w.horas_dia),fd=fin.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
   res.json({estado:'en_jornada',fichaje,hora_fin_prevista:fin.toISOString(),hora_fin_display:fd,mensaje:'Jornada iniciada. Finaliza a las '+fd+'. Buena jornada!'});
 });
+
+// ── PAUSA ──────────────────────────────────────────────────────────────────────
+app.post('/api/fichar/pausa', authWorker, (req, res) => {
+  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id);
+  if (!hoy || hoy.hora_salida) return res.status(400).json({ error: 'No tienes jornada activa.' });
+  const pausaActiva = queries.getPausaActiva.get(hoy.id);
+  if (pausaActiva) return res.status(409).json({ error: 'Ya tienes una pausa activa. Reanuda primero.' });
+  queries.insertPausa.run(hoy.id);
+  const totalPausasH = queries.getTotalPausasH.get(hoy.id).total;
+  const worker = queries.getTrabajadoraById.get(req.user.id);
+  const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia + totalPausasH);
+  res.json({ ok:true, estado:'en_pausa', mensaje:'Pausa iniciada. Pulsa REANUDAR cuando vuelvas.', hora_fin_prevista:fin.toISOString(), hora_fin_display:fin.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}), fichaje:hoy });
+});
+
+app.post('/api/fichar/reanudar', authWorker, (req, res) => {
+  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id);
+  if (!hoy || hoy.hora_salida) return res.status(400).json({ error: 'No tienes jornada activa.' });
+  const pausaActiva = queries.getPausaActiva.get(hoy.id);
+  if (!pausaActiva) return res.status(409).json({ error: 'No tienes ninguna pausa activa.' });
+  queries.cerrarPausa.run(hoy.id);
+  const totalPausasH = queries.getTotalPausasH.get(hoy.id).total;
+  const worker = queries.getTrabajadoraById.get(req.user.id);
+  const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia + totalPausasH);
+  const finDisplay = fin.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+  res.json({ ok:true, estado:'en_jornada', mensaje:'Bienvenida de nuevo. Tu jornada finaliza a las '+finDisplay+'.', hora_fin_prevista:fin.toISOString(), hora_fin_display:finDisplay, fichaje:hoy });
+});
+
 app.get('/api/historial',authW,(req,res)=>{
   const hist=queries.getHistorialMes.all(req.user.id),w=queries.getTrabajadoraById.get(req.user.id);
   const total=hist.filter(f=>f.hora_salida).reduce((a,f)=>a+(f.horas_trabajadas||0),0);
