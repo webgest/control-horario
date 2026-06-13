@@ -47,7 +47,7 @@ app.post('/api/fichar/entrada',authW,(req,res)=>{
 });
 
 // Pausa
-app.post('/api/fichar/pausa', authWorker, function(req, res) {
+app.post('/api/fichar/pausa', authW, function(req, res) {
   var hoy=queries.getFichajeHoyByTrabajadora.get(req.user.id);
   if(!hoy||hoy.hora_salida) return res.status(400).json({error:'No tienes jornada activa.'});
   var pausaActiva=queries.getPausaActiva.get(hoy.id);
@@ -59,7 +59,7 @@ app.post('/api/fichar/pausa', authWorker, function(req, res) {
   res.json({ok:true, estado:'en_pausa', mensaje:'Pausa iniciada. Pulsa REANUDAR cuando vuelvas.', fichaje:hoy, hora_fin_prevista:fin.toISOString(), hora_fin_display:fin.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})});
 });
 
-app.post('/api/fichar/reanudar', authWorker, function(req, res) {
+app.post('/api/fichar/reanudar', authW, function(req, res) {
   var hoy=queries.getFichajeHoyByTrabajadora.get(req.user.id);
   if(!hoy||hoy.hora_salida) return res.status(400).json({error:'No tienes jornada activa.'});
   var pausaActiva=queries.getPausaActiva.get(hoy.id);
