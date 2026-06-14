@@ -59,14 +59,15 @@ function authAdmin(req, res, next) {
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────────
 
+const TZ = 'Europe/Madrid';
+
 function nowLocalISO() {
-  const now = new Date();
-  const offset = now.getTimezoneOffset() * 60000;
-  return new Date(now - offset).toISOString().replace('T', ' ').slice(0, 19);
+  // Siempre usa hora de Madrid, independientemente del TZ del servidor (Railway = UTC)
+  return new Date().toLocaleString('sv-SE', { timeZone: TZ }).replace('T', ' ').slice(0, 19);
 }
 
 function todayLocal() {
-  return nowLocalISO().slice(0, 10);
+  return new Date().toLocaleDateString('sv-SE', { timeZone: TZ });
 }
 
 // Calcula horas de déficit acumuladas en el mes actual para una trabajadora.
@@ -161,7 +162,7 @@ app.get('/api/fichar/estado', authWorker, (req, res) => {
       estado: pausaActiva ? 'en_pausa' : 'en_jornada',
       fichaje: hoy,
       hora_fin_prevista: fin.toISOString(),
-      hora_fin_display: fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+      hora_fin_display: fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' }),
       en_pausa: !!pausaActiva,
       total_pausas_h: Math.round(totalPausasH * 100) / 100,
       deficit_hoy: Math.round(deficit * 100) / 100,
@@ -191,9 +192,9 @@ app.post('/api/fichar/entrada', authWorker, (req, res) => {
     return res.json({
       estado: 'en_jornada', fichaje: hoy,
       hora_fin_prevista: fin.toISOString(),
-      hora_fin_display: fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+      hora_fin_display: fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' }),
       deficit_hoy: Math.round(deficit * 100) / 100,
-      mensaje: `Ya tienes la jornada iniciada. Finaliza a las ${fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}.`,
+      mensaje: `Ya tienes la jornada iniciada. Finaliza a las ${fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' })}.`,
     });
   }
 
@@ -201,7 +202,7 @@ app.post('/api/fichar/entrada', authWorker, (req, res) => {
   const fichaje = queries.getFichajeById.get(result.lastInsertRowid);
   const deficit = calcularDeficitMes(req.user.id, worker.horas_dia);
   const fin     = calcularHoraFin(fichaje.hora_entrada, worker.horas_dia + deficit);
-  const finDisplay = fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  const finDisplay = fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' });
 
   res.json({
     estado: 'en_jornada', fichaje,
@@ -228,9 +229,11 @@ app.post('/api/fichar/pausa', authWorker, (req, res) => {
   res.json({
     ok: true,
     estado: 'en_pausa',
+    fichaje: hoy,
     mensaje: 'Pausa iniciada. Pulsa REANUDAR cuando vuelvas.',
     hora_fin_prevista: fin.toISOString(),
-    hora_fin_display: fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+    hora_fin_display: fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' }),
+    en_pausa: true,
     deficit_hoy: Math.round(deficit * 100) / 100,
   });
 });
@@ -247,13 +250,15 @@ app.post('/api/fichar/reanudar', authWorker, (req, res) => {
   const worker = queries.getTrabajadoraById.get(req.user.id);
   const deficit = calcularDeficitMes(req.user.id, worker.horas_dia);
   const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia + deficit + totalPausasH);
-  const finDisplay = fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  const finDisplay = fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' });
   res.json({
     ok: true,
     estado: 'en_jornada',
+    fichaje: hoy,
     mensaje: `Bienvenida de nuevo. Tu jornada finaliza ahora a las ${finDisplay}.`,
     hora_fin_prevista: fin.toISOString(),
     hora_fin_display: finDisplay,
+    en_pausa: false,
     deficit_hoy: Math.round(deficit * 100) / 100,
   });
 });
@@ -508,7 +513,7 @@ cron.schedule('* * * * *', () => {
       if (pausaActiva) queries.cerrarPausa.run(f.id);
       const salidaISO = fin.toISOString().replace('T', ' ').slice(0, 19);
       queries.closeFichaje.run(salidaISO, calcularHorasTrabajadas(f.hora_entrada, salidaISO), 1, f.id);
-      console.log(`[CRON] Cierre automático: ${f.trabajadora_nombre} a las ${fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}${deficit > 0 ? ` (+${decimalToHHMM(deficit)} compensación)` : ''}`);
+      console.log(`[CRON] Cierre automático: ${f.trabajadora_nombre} a las ${fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' })}${deficit > 0 ? ` (+${decimalToHHMM(deficit)} compensación)` : ''}`);
       smsFin(f.telefono, fin);
     }
   });
