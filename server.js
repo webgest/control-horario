@@ -100,6 +100,22 @@ app.get('/api/trabajadoras-publico', (req, res) => {
   res.json(result);
 });
 
+// GET /api/worker-token/:token — login por token unico (QR / enlace directo)
+app.get('/api/worker-token/:token', (req, res) => {
+  const worker = db.prepare(
+    `SELECT t.*, e.nombre AS empresa_nombre FROM trabajadoras t
+     JOIN empresas e ON t.empresa_id = e.id
+     WHERE t.token = ? AND t.activa = 1`
+  ).get(req.params.token);
+  if (!worker) return res.status(404).json({ error: 'Token no valido o trabajadora inactiva' });
+  const jwtToken = jwt.sign(
+    { id: worker.id, role: 'worker', nombre: worker.nombre, empresa: worker.empresa_nombre },
+    SECRET,
+    { expiresIn: '24h' }
+  );
+  res.json({ token: jwtToken, nombre: worker.nombre, empresa: worker.empresa_nombre });
+});
+
 // POST /api/auth/login — trabajadora sin contraseña (solo ID)
 app.post('/api/auth/login', (req, res) => {
   const { trabajadora_id } = req.body || {};
