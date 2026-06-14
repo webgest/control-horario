@@ -526,6 +526,42 @@ cron.schedule('* * * * *', () => {
   });
 });
 
+// ─── ENLACES DIRECTOS / QR ───────────────────────────────────────────────────────
+
+// GET /api/worker-token/:token — login por enlace personal o QR
+app.get('/api/worker-token/:token', (req, res) => {
+  const worker = db.prepare(
+    `SELECT t.*, e.nombre AS empresa_nombre FROM trabajadoras t
+     JOIN empresas e ON t.empresa_id = e.id
+     WHERE t.token_acceso = ? AND t.activa = 1`
+  ).get(req.params.token);
+  if (!worker) return res.status(404).json({ error: 'Enlace no válido o trabajadora inactiva' });
+  const jwtToken = jwt.sign(
+    { id: worker.id, role: 'worker', nombre: worker.nombre, empresa: worker.empresa_nombre },
+    SECRET,
+    { expiresIn: '24h' }
+  );
+  res.json({ token: jwtToken, nombre: worker.nombre, empresa: worker.empresa_nombre });
+});
+
+// POST /api/admin/empresas — crear nueva empresa
+app.post('/api/admin/empresas', authAdmin, (req, res) => {
+  const { nombre, nif, ccc } = req.body;
+  if (!nombre || !nif || !ccc) return res.status(400).json({ error: 'Nombre, NIF y CCC obligatorios' });
+  const result = db.prepare('INSERT INTO empresas (nombre, nif, ccc) VALUES (?, ?, ?)').run(nombre, nif, ccc);
+  queries.insertAudit.run(req.user.username, 'ALTA_EMPRESA', 'empresas', result.lastInsertRowid, null, JSON.stringify(req.body));
+  res.json({ id: result.lastInsertRowid, mensaje: 'Empresa creada' });
+});
+
+// POST /api/admin/trabajadoras/:id/regenerate-token — renovar enlace personal
+app.post('/api/admin/trabajadoras/:id/regenerate-token', authAdmin, (req, res) => {
+  const crypto = require('crypto');
+  const newToken = crypto.randomBytes(5).toString('hex');
+  db.prepare('UPDATE trabajadoras SET token_acceso = ? WHERE id = ?').run(newToken, req.params.id);
+  queries.insertAudit.run(req.user.username, 'REGENERAR_TOKEN', 'trabajadoras', req.params.id, null, JSON.stringify({ token_acceso: newToken }));
+  res.json({ token_acceso: newToken, mensaje: 'Enlace regenerado correctamente' });
+});
+
 // ─── SPA FALLBACK ────────────────────────────────────────────────────────────────
 
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
