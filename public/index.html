@@ -257,7 +257,7 @@ async function doPausa(){
   if(_p)return;_p=true;
   const btn=document.getElementById('btn-pausa');
   if(btn){btn.disabled=true;btn.textContent='Registrando pausa...';}
-  try{const data=await apiFetch('/api/fichar/pausa','POST',{});showToast(data.mensaje||'Pausa iniciada.');renderEstado(data);}
+  try{const data=await apiFetch('/api/fichar/pausa','POST',{});showToast(data.mensaje||'Pausa iniciada.');await loadEstado();}
   catch(e){showToast(e.message||'Error',true);if(btn){btn.disabled=false;btn.textContent='⏸ PAUSA (descanso / comida)';}}
   finally{_p=false;}
 }
@@ -266,7 +266,7 @@ async function doReanudar(){
   if(_r)return;_r=true;
   const btn=document.getElementById('btn-reanudar');
   if(btn){btn.disabled=true;btn.textContent='Reanudando...';}
-  try{const data=await apiFetch('/api/fichar/reanudar','POST',{});showToast(data.mensaje||'¡Bienvenida de nuevo!');renderEstado(data);}
+  try{const data=await apiFetch('/api/fichar/reanudar','POST',{});showToast(data.mensaje||'¡Bienvenida de nuevo!');await loadEstado();}
   catch(e){showToast(e.message||'Error',true);if(btn){btn.disabled=false;btn.textContent='▶ REANUDAR JORNADA';}}
   finally{_r=false;}
 }
