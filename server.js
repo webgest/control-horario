@@ -148,13 +148,13 @@ app.post('/api/auth/admin/login', async (req, res) => {
 // ─── RUTAS DE TRABAJADORA ────────────────────────────────────────────────────────
 
 app.get('/api/fichar/estado', authWorker, (req, res) => {
-  const hoy    = queries.getFichajeHoyByTrabajadora.get(req.user.id);
+  const hoy    = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayLocal());
   const worker = queries.getTrabajadoraById.get(req.user.id);
 
   if (!hoy) return res.json({ estado: 'sin_fichar', fichaje: null, horas_dia: worker.horas_dia });
 
   if (!hoy.hora_salida) {
-    const totalPausasH = queries.getTotalPausasH.get(hoy.id).total;
+    const totalPausasH = queries.getTotalPausasH.get(nowLocalISO(), hoy.id).total;
     const pausaActiva  = queries.getPausaActiva.get(hoy.id);
     const deficit      = calcularDeficitMes(req.user.id, worker.horas_dia);
     const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia + deficit + totalPausasH);
@@ -180,7 +180,7 @@ app.post('/api/fichar/entrada', authWorker, (req, res) => {
     return res.status(403).json({ error: `No puedes fichar: estás en situación de ${worker.estado}.` });
   }
 
-  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id);
+  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayLocal());
 
   if (hoy && hoy.hora_salida) {
     return res.status(409).json({ error: 'Ya has completado tu jornada de hoy.' });
@@ -198,7 +198,7 @@ app.post('/api/fichar/entrada', authWorker, (req, res) => {
     });
   }
 
-  const result  = queries.createFichaje.run(req.user.id);
+  const result  = queries.createFichaje.run(req.user.id, todayLocal(), nowLocalISO());
   const fichaje = queries.getFichajeById.get(result.lastInsertRowid);
   const deficit = calcularDeficitMes(req.user.id, worker.horas_dia);
   const fin     = calcularHoraFin(fichaje.hora_entrada, worker.horas_dia + deficit);
@@ -215,14 +215,14 @@ app.post('/api/fichar/entrada', authWorker, (req, res) => {
 
 // ── PAUSA ──────────────────────────────────────────────────────────────────────
 app.post('/api/fichar/pausa', authWorker, (req, res) => {
-  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id);
+  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayLocal());
   if (!hoy || hoy.hora_salida) return res.status(400).json({ error: 'No tienes jornada activa.' });
 
   const pausaActiva = queries.getPausaActiva.get(hoy.id);
   if (pausaActiva) return res.status(409).json({ error: 'Ya tienes una pausa activa. Reanuda primero.' });
 
-  queries.insertPausa.run(hoy.id);
-  const totalPausasH = queries.getTotalPausasH.get(hoy.id).total;
+  queries.insertPausa.run(hoy.id, nowLocalISO());
+  const totalPausasH = queries.getTotalPausasH.get(nowLocalISO(), hoy.id).total;
   const worker = queries.getTrabajadoraById.get(req.user.id);
   const deficit = calcularDeficitMes(req.user.id, worker.horas_dia);
   const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia + deficit + totalPausasH);
@@ -239,14 +239,14 @@ app.post('/api/fichar/pausa', authWorker, (req, res) => {
 });
 
 app.post('/api/fichar/reanudar', authWorker, (req, res) => {
-  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id);
+  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayLocal());
   if (!hoy || hoy.hora_salida) return res.status(400).json({ error: 'No tienes jornada activa.' });
 
   const pausaActiva = queries.getPausaActiva.get(hoy.id);
   if (!pausaActiva) return res.status(409).json({ error: 'No tienes ninguna pausa activa.' });
 
-  queries.cerrarPausa.run(hoy.id);
-  const totalPausasH = queries.getTotalPausasH.get(hoy.id).total;
+  queries.cerrarPausa.run(nowLocalISO(), hoy.id);
+  const totalPausasH = queries.getTotalPausasH.get(nowLocalISO(), hoy.id).total;
   const worker = queries.getTrabajadoraById.get(req.user.id);
   const deficit = calcularDeficitMes(req.user.id, worker.horas_dia);
   const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia + deficit + totalPausasH);
@@ -265,13 +265,13 @@ app.post('/api/fichar/reanudar', authWorker, (req, res) => {
 
 // ── FINALIZAR JORNADA ANTES (trabajadora) ──────────────────────────────────────
 app.post('/api/fichar/salida', authWorker, (req, res) => {
-  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id);
+  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayLocal());
   if (!hoy) return res.status(404).json({ error: 'No tienes jornada iniciada hoy.' });
   if (hoy.hora_salida) return res.status(409).json({ error: 'Tu jornada ya está cerrada.' });
 
   // Cerrar pausa activa si la hay
   const pausaActiva = queries.getPausaActiva.get(hoy.id);
-  if (pausaActiva) queries.cerrarPausa.run(hoy.id);
+  if (pausaActiva) queries.cerrarPausa.run(nowLocalISO(), hoy.id);
 
   const s  = nowLocalISO();
   const ht = calcularHorasTrabajadas(hoy.hora_entrada, s);
@@ -286,7 +286,7 @@ app.post('/api/fichar/salida', authWorker, (req, res) => {
 });
 
 app.get('/api/historial', authWorker, (req, res) => {
-  const historial    = queries.getHistorialMes.all(req.user.id);
+  const historial    = queries.getHistorialMes.all(nowLocalISO(), req.user.id, todayLocal().slice(0, 7));
   const worker       = queries.getTrabajadoraById.get(req.user.id);
   const totalHoras   = historial.filter(f => f.hora_salida).reduce((a, f) => a + (f.horas_trabajadas || 0), 0);
   res.json({
@@ -302,7 +302,7 @@ app.get('/api/historial', authWorker, (req, res) => {
 app.get('/api/admin/dashboard', authAdmin, (req, res) => {
   const empresas = queries.getAllEmpresas.all();
   const result = empresas.map(emp => {
-    const trabajadoras = queries.getEstadoHoyByEmpresa.all(emp.id);
+    const trabajadoras = queries.getEstadoHoyByEmpresa.all(todayLocal(), emp.id);
     const stats = { total: 0, fichadas: 0, jornada_completada: 0, sin_fichar: 0, it_baja: 0, alerta: 0 };
     stats.total = trabajadoras.length;
     trabajadoras.forEach(t => {
@@ -319,7 +319,7 @@ app.get('/api/admin/dashboard', authAdmin, (req, res) => {
 app.get('/api/admin/empresas', authAdmin, (req, res) => res.json(queries.getAllEmpresas.all()));
 
 app.get('/api/admin/empresas/:id/trabajadoras', authAdmin, (req, res) =>
-  res.json(queries.getEstadoHoyByEmpresa.all(req.params.id)));
+  res.json(queries.getEstadoHoyByEmpresa.all(todayLocal(), req.params.id)));
 
 app.get('/api/admin/trabajadoras', authAdmin, (req, res) =>
   res.json(queries.getAllTrabajadoras.all()));
@@ -417,7 +417,7 @@ app.put('/api/admin/fichajes/:id', authAdmin, (req, res) => {
   const salidaFinal  = hora_salida  ?? prev.hora_salida;
   const horas = (entradaFinal && salidaFinal) ? calcularHorasTrabajadas(entradaFinal, salidaFinal) : prev.horas_trabajadas;
 
-  queries.updateFichaje.run({ id: req.params.id, hora_entrada: entradaFinal, hora_salida: salidaFinal, horas_trabajadas: horas, observaciones: observaciones ?? prev.observaciones, admin: req.user.username, razon: razon.trim() });
+  queries.updateFichaje.run({ id: req.params.id, hora_entrada: entradaFinal, hora_salida: salidaFinal, horas_trabajadas: horas, observaciones: observaciones ?? prev.observaciones, admin: req.user.username, modificado_en: nowLocalISO(), razon: razon.trim() });
   queries.insertAudit.run(req.user.username, 'CORRECCION_FICHAJE', 'fichajes', req.params.id, JSON.stringify(prev), JSON.stringify(req.body));
   res.json({ mensaje: 'Fichaje corregido' });
 });
@@ -506,12 +506,12 @@ cron.schedule('* * * * *', () => {
   const ahora    = new Date();
   abiertos.forEach(f => {
     const pausaActiva  = queries.getPausaActiva.get(f.id);
-    const totalPausasH = queries.getTotalPausasH.get(f.id).total;
+    const totalPausasH = queries.getTotalPausasH.get(nowLocalISO(), f.id).total;
     const deficit      = calcularDeficitMes(f.trabajadora_id, f.horas_dia);
     const fin = calcularHoraFin(f.hora_entrada, f.horas_dia + deficit + totalPausasH);
     if (ahora >= fin) {
-      if (pausaActiva) queries.cerrarPausa.run(f.id);
-      const salidaISO = fin.toISOString().replace('T', ' ').slice(0, 19);
+      if (pausaActiva) queries.cerrarPausa.run(nowLocalISO(), f.id);
+      const salidaISO = fin.toLocaleString('sv-SE', { timeZone: 'Europe/Madrid' }).replace('T', ' ').slice(0, 19);
       queries.closeFichaje.run(salidaISO, calcularHorasTrabajadas(f.hora_entrada, salidaISO), 1, f.id);
       console.log(`[CRON] Cierre automático: ${f.trabajadora_nombre} a las ${fin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' })}${deficit > 0 ? ` (+${decimalToHHMM(deficit)} compensación)` : ''}`);
       smsFin(f.telefono, fin);
