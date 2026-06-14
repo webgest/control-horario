@@ -141,7 +141,11 @@ let token=null,userData=null,empresas=[],countdownInterval=null;
 
 (async function init(){
   const m=window.location.pathname.match(/^\/w\/([a-f0-9]+)$/i);
-  if(m){try{const d=await apiFetch('/api/worker-token/'+m[1]);token=d.token;userData=JSON.parse(atob(token.split('.')[1]));localStorage.setItem('ch_token',token);showPanel();return;}catch(e){}}
+  if(m){
+    localStorage.removeItem('ch_token');
+    try{const d=await apiFetch('/api/worker-token/'+m[1]);token=d.token;userData=JSON.parse(atob(token.split('.')[1]));localStorage.setItem('ch_token',token);showPanel();return;}
+    catch(e){await loadEmpresas();return;}
+  }
   const saved=localStorage.getItem('ch_token');
   if(saved){try{const p=JSON.parse(atob(saved.split('.')[1]));if(p.exp*1000>Date.now()&&p.role==='worker'){token=saved;userData=p;showPanel();return;}}catch(e){} localStorage.removeItem('ch_token');}
   await loadEmpresas();
