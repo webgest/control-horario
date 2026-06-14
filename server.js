@@ -561,6 +561,19 @@ app.get('/api/worker-token/:token', (req, res) => {
   res.json({ token: jwtToken, nombre: worker.nombre, empresa: worker.empresa_nombre });
 });
 
+// GET /api/debug/tz — diagnóstico de zona horaria (solo para verificar)
+app.get('/api/debug/tz', (req, res) => {
+  const d = new Date();
+  res.json({
+    utc_now:       d.toISOString(),
+    madrid_now:    nowLocalISO(),
+    today_local:   todayLocal(),
+    spain_offset:  spainOffsetHours(d),
+    tz_env:        process.env.TZ || '(no definido)',
+    node_version:  process.version,
+  });
+});
+
 // POST /api/admin/empresas — crear nueva empresa
 app.post('/api/admin/empresas', authAdmin, (req, res) => {
   const { nombre, nif, ccc } = req.body;
