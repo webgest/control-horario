@@ -63,6 +63,8 @@
   #btn-pausa:active { transform: scale(0.97); }
   #btn-reanudar { width: 100%; padding: 18px; background: var(--success); color: #fff; border: none; border-radius: var(--radius); font-size: 18px; font-weight: 800; cursor: pointer; letter-spacing: 1px; box-shadow: 0 6px 18px rgba(22,163,74,0.30); transition: background .2s, transform .1s; margin-top: 12px; }
   #btn-reanudar:active { transform: scale(0.97); }
+  #btn-finalizar { width: 100%; padding: 14px; background: #fff; color: var(--danger); border: 2px solid var(--danger); border-radius: var(--radius); font-size: 15px; font-weight: 700; cursor: pointer; letter-spacing: 0.5px; transition: background .2s, transform .1s; margin-top: 10px; }
+  #btn-finalizar:active { transform: scale(0.97); background: var(--danger-light); }
   .pausa-badge { display: inline-block; background: var(--warning); color: #fff; padding: 6px 18px; border-radius: 99px; font-size: 14px; font-weight: 700; margin-bottom: 8px; }
   .historial-header { background: #fff; border-radius: var(--radius); padding: 16px 20px; box-shadow: var(--shadow); margin-bottom: 12px; }
   .resumen { display: flex; gap: 10px; margin-top: 10px; }
@@ -80,9 +82,9 @@
 <body>
 <div id="screen-selector">
   <div class="selector-header">
-    <div class="icon">&#128336;</div>
+    <div class="icon">🕐</div>
     <h1>Control Horario</h1>
-    <p>Webgest &middot; Servicios de Limpieza</p>
+    <p>Webgest · Servicios de Limpieza</p>
   </div>
   <div class="selector-body">
     <div id="lista-empresas">
@@ -91,10 +93,10 @@
     </div>
     <div id="lista-trabajadoras">
       <div class="empresa-selected-label">
-        <button class="btn-back" onclick="volverEmpresas()">&#8592;</button>
-        <span id="empresa-seleccionada-nombre">&mdash;</span>
+        <button class="btn-back" onclick="volverEmpresas()">←</button>
+        <span id="empresa-seleccionada-nombre">—</span>
       </div>
-      <div class="selector-label">&iquest;Qui&eacute;n eres?</div>
+      <div class="selector-label">¿Quién eres?</div>
       <div id="trabajadoras-list"></div>
     </div>
   </div>
@@ -103,26 +105,26 @@
 <div id="screen-panel">
   <div class="top-bar">
     <div class="user-info">
-      <h2 id="user-nombre">&mdash;</h2>
-      <p id="user-empresa">&mdash;</p>
+      <h2 id="user-nombre">—</h2>
+      <p id="user-empresa">—</p>
     </div>
-    <button class="btn-cambiar" onclick="cambiarTrabajadora()">&#8617; Cambiar</button>
+    <button class="btn-cambiar" onclick="cambiarTrabajadora()">↩ Cambiar</button>
   </div>
   <div class="panel-body">
     <div class="tab-bar">
-      <button class="tab-btn active" onclick="switchTab('fichar', this)">&#128205; Fichar</button>
-      <button class="tab-btn" onclick="switchTab('historial', this)">&#128203; Historial</button>
+      <button class="tab-btn active" onclick="switchTab('fichar', this)">📍 Fichar</button>
+      <button class="tab-btn" onclick="switchTab('historial', this)">📋 Historial</button>
     </div>
     <div id="tab-fichar" class="tab-content active">
       <div id="estado-card" class="estado-card"><div class="loading">Cargando...</div></div>
     </div>
     <div id="tab-historial" class="tab-content">
       <div class="historial-header">
-        <strong id="hist-mes">&mdash;</strong>
+        <strong id="hist-mes">—</strong>
         <div class="resumen">
-          <div class="resumen-item"><div class="val" id="hist-dias">&mdash;</div><div class="lbl">D&iacute;as</div></div>
-          <div class="resumen-item"><div class="val" id="hist-horas">&mdash;</div><div class="lbl">Horas</div></div>
-          <div class="resumen-item"><div class="val" id="hist-contrato">&mdash;</div><div class="lbl">H/d&iacute;a</div></div>
+          <div class="resumen-item"><div class="val" id="hist-dias">—</div><div class="lbl">Días</div></div>
+          <div class="resumen-item"><div class="val" id="hist-horas">—</div><div class="lbl">Horas</div></div>
+          <div class="resumen-item"><div class="val" id="hist-contrato">—</div><div class="lbl">H/día</div></div>
         </div>
       </div>
       <div id="hist-list"><div class="loading">Cargando...</div></div>
@@ -136,10 +138,8 @@
 let token=null,userData=null,empresas=[],countdownInterval=null;
 
 (async function init(){
-  // Auto-login por URL personal /w/TOKEN
   const m=window.location.pathname.match(/^\/w\/([a-f0-9]+)$/i);
   if(m){try{const d=await apiFetch('/api/worker-token/'+m[1]);token=d.token;userData=JSON.parse(atob(token.split('.')[1]));localStorage.setItem('ch_token',token);showPanel();return;}catch(e){}}
-  // Token guardado en localStorage
   const saved=localStorage.getItem('ch_token');
   if(saved){try{const p=JSON.parse(atob(saved.split('.')[1]));if(p.exp*1000>Date.now()&&p.role==='worker'){token=saved;userData=p;showPanel();return;}}catch(e){} localStorage.removeItem('ch_token');}
   await loadEmpresas();
@@ -147,13 +147,15 @@ let token=null,userData=null,empresas=[],countdownInterval=null;
 
 async function loadEmpresas(){
   try{empresas=await apiFetch('/api/trabajadoras-publico');renderEmpresas();}
-  catch(e){document.getElementById('empresas-list').innerHTML='<p style="color:var(--danger);padding:16px;">Error: '+e.message+'</p>';}
+  catch(e){document.getElementById('empresas-list').innerHTML=`<p style="color:var(--danger);padding:16px;">Error: ${e.message}</p>`;}
 }
 
 function renderEmpresas(){
-  document.getElementById('empresas-list').innerHTML=empresas.map(emp=>
-    '<button class="empresa-btn" onclick="seleccionarEmpresa('+emp.id+')"><div><div class="emp-nombre">'+emp.nombre+'</div><div class="emp-info">'+emp.trabajadoras.filter(t=>t.estado==='activa').length+' activas</div></div><span class="emp-arrow">&#8250;</span></button>'
-  ).join('');
+  document.getElementById('empresas-list').innerHTML=empresas.map(emp=>`
+    <button class="empresa-btn" onclick="seleccionarEmpresa(${emp.id})">
+      <div><div class="emp-nombre">${emp.nombre}</div><div class="emp-info">${emp.trabajadoras.filter(t=>t.estado==='activa').length} trabajadoras activas</div></div>
+      <span class="emp-arrow">›</span>
+    </button>`).join('');
 }
 
 function seleccionarEmpresa(empId){
@@ -165,7 +167,7 @@ function seleccionarEmpresa(empId){
   document.getElementById('trabajadoras-list').innerHTML=emp.trabajadoras.map(t=>{
     const ini=t.nombre.split(',').map(p=>p.trim()[0]).filter(Boolean).slice(0,2).join('');
     const est=t.estado==='IT'?'<span class="badge-it">IT</span>':t.estado==='baja'?'<span class="badge-baja">Baja</span>':t.estado==='vacaciones'?'<span style="color:var(--gray-400)">Vacaciones</span>':'';
-    return '<button class="trabajadora-btn" onclick="entrarComoTrabajadora('+t.id+')"><div class="trab-avatar">'+ini+'</div><div><div class="trab-nombre">'+t.nombre+'</div>'+(est?'<div class="trab-estado">'+est+'</div>':'')+'</div></button>';
+    return `<button class="trabajadora-btn" onclick="entrarComoTrabajadora(${t.id})"><div class="trab-avatar">${ini}</div><div><div class="trab-nombre">${t.nombre}</div>${est?`<div class="trab-estado">${est}</div>`:''}</div></button>`;
   }).join('');
 }
 
@@ -179,8 +181,8 @@ async function entrarComoTrabajadora(id){
 function showPanel(){
   document.getElementById('screen-selector').style.display='none';
   document.getElementById('screen-panel').style.display='flex';
-  document.getElementById('user-nombre').textContent=userData.nombre||'\u2014';
-  document.getElementById('user-empresa').textContent=userData.empresa||'\u2014';
+  document.getElementById('user-nombre').textContent=userData.nombre||'—';
+  document.getElementById('user-empresa').textContent=userData.empresa||'—';
   loadEstado();
 }
 
@@ -201,26 +203,28 @@ function switchTab(tab,btn){
 
 async function loadEstado(){
   try{renderEstado(await apiFetch('/api/fichar/estado'));}
-  catch(e){document.getElementById('estado-card').innerHTML='<p style="color:var(--danger)">Error: '+e.message+'</p>';}
+  catch(e){document.getElementById('estado-card').innerHTML=`<p style="color:var(--danger)">Error: ${e.message}</p>`;}
 }
 
 function renderEstado(data){
   const card=document.getElementById('estado-card');
   if(data.estado==='jornada_completada'){
     card.className='estado-card card-completada';
-    card.innerHTML='<div class="estado-icon">&#10003;</div><div class="estado-title">&#161;Jornada completada!</div><div class="estado-sub">Entrada: <strong>'+fmtH(data.fichaje.hora_entrada)+'</strong> &middot; Salida: <strong>'+fmtH(data.fichaje.hora_salida)+'</strong><br>Total: <strong>'+decHM(data.fichaje.horas_trabajadas)+'</strong></div><div style="color:var(--success);font-size:15px;font-weight:700;">&#161;Hasta ma&#241;ana! &#128588;</div>';
+    const hSal=fmtH(data.fichaje.hora_salida);
+    card.innerHTML=`<div class="estado-icon">✅</div><div class="estado-title">¡Jornada finalizada!</div><div class="hora-fin-badge" style="background:var(--success);margin-bottom:10px">${hSal}</div><div class="estado-sub">Tu jornada de hoy ha finalizado a las <strong>${hSal}</strong>.<br>¡Descansa, hasta mañana! 🙌</div><div style="font-size:12px;color:var(--gray-400);margin-top:10px">Entrada: ${fmtH(data.fichaje.hora_entrada)} &nbsp;·&nbsp; Total: ${decHM(data.fichaje.horas_trabajadas)}</div>`;
     if(countdownInterval)clearInterval(countdownInterval);
   }else if(data.estado==='en_pausa'){
     card.className='estado-card card-en-pausa';
-    card.innerHTML='<div class="estado-icon">&#9208;</div><div class="estado-title">En pausa</div><div class="estado-sub">Inicio jornada: <strong>'+fmtH(data.fichaje.hora_entrada)+'</strong></div><div class="pausa-badge">&#9208; PAUSA ACTIVA</div><div class="hora-fin-badge" id="fin-badge" style="background:var(--warning)">'+(data.hora_fin_display||'&mdash;')+'</div><div class="countdown-sub" id="fin-countdown">Fin previsto (pausas incluidas)</div><button id="btn-reanudar" onclick="doReanudar()">&#9654; REANUDAR JORNADA</button>';
+    card.innerHTML=`<div class="estado-icon">⏸️</div><div class="estado-title">En pausa</div><div class="estado-sub">Inicio jornada: <strong>${fmtH(data.fichaje.hora_entrada)}</strong></div><div class="pausa-badge">⏸ PAUSA ACTIVA</div><div class="hora-fin-badge" id="fin-badge" style="background:var(--warning)">${data.hora_fin_display||'—'}</div><div class="countdown-sub" id="fin-countdown">Fin previsto (pausas incluidas)</div><button id="btn-reanudar" onclick="doReanudar()">▶ REANUDAR JORNADA</button>`;
     startCountdown(data.hora_fin_prevista);
   }else if(data.estado==='en_jornada'){
     card.className='estado-card card-en-jornada';
-    card.innerHTML='<div class="estado-icon">&#9203;</div><div class="estado-title">En jornada</div><div class="estado-sub">Inicio: <strong>'+fmtH(data.fichaje.hora_entrada)+'</strong></div><div class="hora-fin-badge" id="fin-badge">'+(data.hora_fin_display||'&mdash;')+'</div><div class="countdown-sub" id="fin-countdown">Hora de fin</div><button id="btn-pausa" onclick="doPausa()">&#9208; PAUSA (descanso / comida)</button>';
+    const extraInfo=data.deficit_hoy>0?`<div style="font-size:12px;color:var(--warning);margin-top:4px">+${decHM(data.deficit_hoy)} de compensación incluida</div>`:'';
+    card.innerHTML=`<div class="estado-icon">⏱️</div><div class="estado-title">En jornada</div><div class="estado-sub">Inicio: <strong>${fmtH(data.fichaje.hora_entrada)}</strong></div><div class="hora-fin-badge" id="fin-badge">${data.hora_fin_display||'—'}</div><div class="countdown-sub" id="fin-countdown">Hora de fin</div>${extraInfo}<button id="btn-pausa" onclick="doPausa()">⏸ PAUSA (descanso / comida)</button><button id="btn-finalizar" onclick="doFinalizar()">🏁 FINALIZAR JORNADA ANTES</button>`;
     startCountdown(data.hora_fin_prevista);
   }else{
     card.className='estado-card';
-    card.innerHTML='<div class="estado-icon">&#128070;</div><div class="estado-title">&#161;Hola! &#191;Lista para empezar?</div><div class="estado-sub">Pulsa el bot&#243;n para registrar tu entrada.</div><button id="btn-fichar" onclick="doFichar()">FICHAR ENTRADA</button>';
+    card.innerHTML=`<div class="estado-icon">👆</div><div class="estado-title">¡Hola! ¿Lista para empezar?</div><div class="estado-sub">Pulsa el botón para registrar tu entrada.</div><button id="btn-fichar" onclick="doFichar()">FICHAR ENTRADA</button>`;
   }
 }
 
@@ -229,7 +233,7 @@ async function doFichar(){
   if(_f)return;_f=true;
   const btn=document.getElementById('btn-fichar');
   if(btn){btn.disabled=true;btn.textContent='Registrando...';}
-  try{const data=await apiFetch('/api/fichar/entrada','POST',{});showToast(data.mensaje||'&#161;Fichaje registrado!');renderEstado(data);if(data.hora_fin_prevista)startCountdown(data.hora_fin_prevista);}
+  try{const data=await apiFetch('/api/fichar/entrada','POST',{});showToast(data.mensaje||'¡Fichaje registrado!');renderEstado(data);if(data.hora_fin_prevista)startCountdown(data.hora_fin_prevista);}
   catch(e){showToast(e.message||'Error al fichar',true);if(btn){btn.disabled=false;btn.textContent='FICHAR ENTRADA';}}
   finally{_f=false;}
 }
@@ -239,7 +243,7 @@ async function doPausa(){
   const btn=document.getElementById('btn-pausa');
   if(btn){btn.disabled=true;btn.textContent='Registrando pausa...';}
   try{const data=await apiFetch('/api/fichar/pausa','POST',{});showToast(data.mensaje||'Pausa iniciada.');renderEstado(data);}
-  catch(e){showToast(e.message||'Error',true);if(btn){btn.disabled=false;btn.textContent='&#9208; PAUSA (descanso / comida)';}}
+  catch(e){showToast(e.message||'Error',true);if(btn){btn.disabled=false;btn.textContent='⏸ PAUSA (descanso / comida)';}}
   finally{_p=false;}
 }
 
@@ -247,9 +251,21 @@ async function doReanudar(){
   if(_r)return;_r=true;
   const btn=document.getElementById('btn-reanudar');
   if(btn){btn.disabled=true;btn.textContent='Reanudando...';}
-  try{const data=await apiFetch('/api/fichar/reanudar','POST',{});showToast(data.mensaje||'&#161;Bienvenida de nuevo!');renderEstado(data);}
-  catch(e){showToast(e.message||'Error',true);if(btn){btn.disabled=false;btn.textContent='&#9654; REANUDAR JORNADA';}}
+  try{const data=await apiFetch('/api/fichar/reanudar','POST',{});showToast(data.mensaje||'¡Bienvenida de nuevo!');renderEstado(data);}
+  catch(e){showToast(e.message||'Error',true);if(btn){btn.disabled=false;btn.textContent='▶ REANUDAR JORNADA';}}
   finally{_r=false;}
+}
+
+let _fin=false;
+async function doFinalizar(){
+  if(_fin)return;
+  if(!confirm('¿Confirmas que quieres finalizar tu jornada ahora?\nLas horas que falten se compensarán otro día de este mes.'))return;
+  _fin=true;
+  const btn=document.getElementById('btn-finalizar');
+  if(btn){btn.disabled=true;btn.textContent='Finalizando...';}
+  try{const data=await apiFetch('/api/fichar/salida','POST',{});showToast(data.mensaje||'Jornada finalizada.');renderEstado(data);}
+  catch(e){showToast(e.message||'Error',true);if(btn){btn.disabled=false;btn.textContent='🏁 FINALIZAR JORNADA ANTES';}}
+  finally{_fin=false;}
 }
 
 function startCountdown(finISO){
@@ -261,7 +277,7 @@ function startCountdown(finISO){
     const h=Math.floor(diff/3600000),m=Math.floor((diff%3600000)/60000),s=Math.floor((diff%60000)/1000);
     const b=document.getElementById('fin-badge'),c=document.getElementById('fin-countdown');
     if(b)b.textContent=fin.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
-    if(c)c.textContent='Faltan '+(h>0?h+'h ':'')+m+'m '+s+'s';
+    if(c)c.textContent=`Faltan ${h>0?h+'h ':''}${m}m ${s}s`;
   }
   upd();countdownInterval=setInterval(upd,1000);
 }
@@ -279,24 +295,22 @@ async function loadHistorial(){
     if(!data.fichajes.length){list.innerHTML='<div class="empty-state">Sin fichajes este mes</div>';return;}
     list.innerHTML=data.fichajes.map(f=>{
       const fecha=new Date(f.fecha+'T12:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'2-digit',month:'short'});
-      return '<div class="fichaje-item"><div class="fichaje-dot '+(f.hora_salida?'dot-ok':'dot-abierto')+'"></div><div class="fichaje-info"><div class="fichaje-fecha">'+fecha+'</div><div class="fichaje-horas">'+fmtH(f.hora_entrada)+' &#8594; '+(f.hora_salida?fmtH(f.hora_salida):'en curso')+'</div></div><div class="fichaje-tiempo">'+(f.hora_salida?decHM(f.horas_trabajadas):'&mdash;')+'</div></div>';
+      return `<div class="fichaje-item"><div class="fichaje-dot ${f.hora_salida?'dot-ok':'dot-abierto'}"></div><div class="fichaje-info"><div class="fichaje-fecha">${fecha}</div><div class="fichaje-horas">${fmtH(f.hora_entrada)} → ${f.hora_salida?fmtH(f.hora_salida):'en curso'}</div></div><div class="fichaje-tiempo">${f.hora_salida?decHM(f.horas_trabajadas):'—'}</div></div>`;
     }).join('');
-  }catch(e){document.getElementById('hist-list').innerHTML='<p style="color:var(--danger);padding:16px;">Error: '+e.message+'</p>';}
+  }catch(e){document.getElementById('hist-list').innerHTML=`<p style="color:var(--danger);padding:16px;">Error: ${e.message}</p>`;}
 }
 
-function fmtH(iso){if(!iso)return'&mdash;';return String(iso).slice(11,16);}
-function decHM(h){if(h==null)return'&mdash;';const ho=Math.floor(h),mi=Math.round((h-ho)*60);return ho+'h'+String(mi).padStart(2,'0')+'m';}
-async function apiFetch(url,method,body){
-  method=method||'GET';
-  const opts={method:method,headers:{'Content-Type':'application/json'}};
+function fmtH(iso){if(!iso)return'—';return String(iso).slice(11,16);}
+function decHM(h){if(h==null)return'—';const ho=Math.floor(h),mi=Math.round((h-ho)*60);return`${ho}h${String(mi).padStart(2,'0')}m`;}
+async function apiFetch(url,method='GET',body){
+  const opts={method,headers:{'Content-Type':'application/json'}};
   if(token)opts.headers['Authorization']='Bearer '+token;
   if(body!==undefined)opts.body=JSON.stringify(body);
   const resp=await fetch(url,opts);const json=await resp.json();
-  if(!resp.ok)throw new Error(json.error||'Error '+resp.status);return json;
+  if(!resp.ok)throw new Error(json.error||`Error ${resp.status}`);return json;
 }
-function showToast(msg,isError){
-  isError=isError||false;
-  const t=document.getElementById('toast');t.textContent=msg;t.style.background=isError?'var(--danger)':'var(--gray-800)';t.classList.add('show');setTimeout(function(){t.classList.remove('show');},3500);
+function showToast(msg,isError=false){
+  const t=document.getElementById('toast');t.textContent=msg;t.style.background=isError?'var(--danger)':'var(--gray-800)';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500);
 }
 </script>
 </body>
