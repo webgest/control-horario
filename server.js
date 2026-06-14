@@ -334,6 +334,9 @@ app.post('/api/admin/trabajadoras', authAdmin, async (req, res) => {
   const digits   = dniUpper.replace(/[^0-9]/g, '');
   const pinHash  = await bcrypt.hash(digits.length >= 4 ? digits.slice(-4) : '1234', 10);
 
+  const crypto = require('crypto');
+  const tokenAcceso = crypto.randomBytes(5).toString('hex');
+
   try {
     const result = queries.insertTrabajadora.run({
       empresa_id, nombre, dni: dniUpper, pin: pinHash,
@@ -344,6 +347,7 @@ app.post('/api/admin/trabajadoras', authAdmin, async (req, res) => {
       estado: estado || 'activa',
       observaciones: observaciones || null,
     });
+    db.prepare('UPDATE trabajadoras SET token_acceso = ? WHERE id = ?').run(tokenAcceso, result.lastInsertRowid);
     queries.insertAudit.run(req.user.username, 'ALTA_TRABAJADORA', 'trabajadoras', result.lastInsertRowid, null, JSON.stringify(req.body));
     res.json({ id: result.lastInsertRowid, mensaje: 'Trabajadora dada de alta correctamente' });
   } catch (err) {
