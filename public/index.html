@@ -56,7 +56,9 @@
   .countdown-sub { font-size: 12px; color: var(--gray-400); margin-bottom: 0; }
   #btn-fichar { width: 100%; padding: 24px; background: var(--primary); color: #fff; border: none; border-radius: var(--radius); font-size: 22px; font-weight: 900; cursor: pointer; letter-spacing: 1px; box-shadow: 0 8px 24px rgba(26,86,160,0.35); transition: background .2s, transform .1s, box-shadow .2s; }
   #btn-fichar:active { transform: scale(0.97); } #btn-fichar:disabled { background: var(--gray-400); box-shadow: none; cursor: default; }
-  .card-completada { background: var(--success-light); border: 2px solid var(--success); }
+  .card-completada { background: #f0fdf4; border: 3px solid var(--success); }
+  .fin-aviso { background: #166534; color: #fff; border-radius: 10px; padding: 14px 16px; margin: 14px 0 10px; text-align: center; font-size: 15px; font-weight: 700; line-height: 1.4; }
+  .fin-legal { background: #fefce8; border: 1px solid #fde047; border-radius: 8px; padding: 10px 14px; margin-top: 10px; font-size: 11.5px; color: #713f12; line-height: 1.5; text-align: left; }
   .card-en-jornada { background: #eff6ff; border: 2px solid var(--primary); }
   .card-en-pausa   { background: var(--warning-light); border: 2px solid var(--warning); }
   #btn-pausa { width: 100%; padding: 18px; background: var(--warning); color: #fff; border: none; border-radius: var(--radius); font-size: 18px; font-weight: 800; cursor: pointer; letter-spacing: 1px; box-shadow: 0 6px 18px rgba(217,119,6,0.30); transition: background .2s, transform .1s; margin-top: 12px; }
@@ -211,7 +213,16 @@ function renderEstado(data){
   if(data.estado==='jornada_completada'){
     card.className='estado-card card-completada';
     const hSal=fmtH(data.fichaje.hora_salida);
-    card.innerHTML=`<div class="estado-icon">✅</div><div class="estado-title">¡Jornada finalizada!</div><div class="hora-fin-badge" style="background:var(--success);margin-bottom:10px">${hSal}</div><div class="estado-sub">Tu jornada de hoy ha finalizado a las <strong>${hSal}</strong>.<br>¡Descansa, hasta mañana! 🙌</div><div style="font-size:12px;color:var(--gray-400);margin-top:10px">Entrada: ${fmtH(data.fichaje.hora_entrada)} &nbsp;·&nbsp; Total: ${decHM(data.fichaje.horas_trabajadas)}</div>`;
+    const autoCierre=data.fichaje.cerrado_automaticamente;
+    const modoTexto=autoCierre?'El sistema ha registrado automáticamente tu salida.':'Has finalizado tu jornada voluntariamente.';
+    card.innerHTML=`
+      <div class="estado-icon">✅</div>
+      <div class="estado-title">JORNADA FINALIZADA</div>
+      <div class="hora-fin-badge" style="background:var(--success);margin-bottom:4px">${hSal}</div>
+      <div style="font-size:12px;color:var(--gray-500);margin-bottom:6px">${modoTexto}</div>
+      <div style="font-size:13px;color:var(--gray-600)">Entrada: <strong>${fmtH(data.fichaje.hora_entrada)}</strong> &nbsp;·&nbsp; Total: <strong>${decHM(data.fichaje.horas_trabajadas)}</strong></div>
+      <div class="fin-aviso">🚫 Su jornada laboral ha concluido.<br>No puede continuar trabajando hoy.<br>¡Descanse! Hasta mañana 🙌</div>
+      <div class="fin-legal">⚖️ <strong>Recuerde:</strong> Su contrato únicamente contempla las horas pactadas. Trabajar más allá de la jornada contratada sin autorización expresa de la empresa no está permitido. Los servicios deben prestarse exclusivamente en los centros de trabajo asignados. El registro de jornada queda archivado conforme al RD-ley 8/2019.</div>`;
     if(countdownInterval)clearInterval(countdownInterval);
   }else if(data.estado==='en_pausa'){
     card.className='estado-card card-en-pausa';
