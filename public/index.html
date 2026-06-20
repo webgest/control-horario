@@ -315,7 +315,20 @@ async function loadHistorial(){
   }catch(e){document.getElementById('hist-list').innerHTML=`<p style="color:var(--danger);padding:16px;">Error: ${e.message}</p>`;}
 }
 
-function fmtH(iso){if(!iso)return'—';return String(iso).slice(11,16);}
+function fmtH(iso){
+  if(!iso)return'—';
+  // Convierte string UTC almacenado ("2026-06-15 21:51:00") a hora Madrid (+1/+2)
+  try{
+    const d=new Date(String(iso).replace(' ','T')+'Z');
+    if(isNaN(d))return String(iso).slice(11,16);
+    const y=d.getUTCFullYear();
+    const cest=new Date(Date.UTC(y,2,31,1,0,0));while(cest.getUTCDay()!==0)cest.setUTCDate(cest.getUTCDate()-1);
+    const cet=new Date(Date.UTC(y,9,31,1,0,0));while(cet.getUTCDay()!==0)cet.setUTCDate(cet.getUTCDate()-1);
+    const off=(d>=cest&&d<cet)?2:1;
+    const m=new Date(d.getTime()+off*3600000);
+    return m.toISOString().slice(11,16);
+  }catch(e){return String(iso).slice(11,16);}
+}
 function decHM(h){if(h==null)return'—';const ho=Math.floor(h),mi=Math.round((h-ho)*60);return`${ho}h${String(mi).padStart(2,'0')}m`;}
 async function apiFetch(url,method='GET',body){
   const opts={method,headers:{'Content-Type':'application/json'}};
