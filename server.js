@@ -59,10 +59,19 @@ function authAdmin(req, res, next) {
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────────
 
-const TZ = 'Europe/Madrid';
+// nowDB(): UTC puro para almacenar en DB. fmtMadrid/fmtH en el cliente convierte a hora Madrid.
+// No depende de TZ del sistema ni de ICU/tzdata — funciona en Alpine sin configuración.
+function nowDB() {
+  return new Date().toISOString().replace('T', ' ').slice(0, 19);
+}
 
-// Calcula el offset UTC de España en horas (+1 CET, +2 CEST).
-// Usa aritmética pura UTC para no depender de ICU ni tzdata en el contenedor.
+// todayMadrid(): fecha actual en zona horaria de Madrid para el campo fecha del fichaje.
+function todayMadrid() {
+  const now = new Date();
+  return new Date(now.getTime() + spainOffsetHours(now) * 3600000).toISOString().slice(0, 10);
+}
+
+// Calcula el offset UTC de España (+1 CET, +2 CEST) — aritmética pura UTC, sin tzdata/ICU
 function spainOffsetHours(d) {
   const d_ = d || new Date();
   const y = d_.getUTCFullYear();
@@ -75,28 +84,22 @@ function spainOffsetHours(d) {
   return (d_ >= cest && d_ < cet) ? 2 : 1;
 }
 
-function nowLocalISO() {
-  const d = new Date();
-  const local = new Date(d.getTime() + spainOffsetHours(d) * 3600000);
-  return local.toISOString().slice(0, 19).replace('T', ' ');
-}
-
-function todayLocal() {
-  const d = new Date();
-  const local = new Date(d.getTime() + spainOffsetHours(d) * 3600000);
-  return local.toISOString().slice(0, 10);
-}
-
-// Formatea un Date como "HH:MM" en hora de Madrid (sin depender de ICU)
+// Formatea un Date UTC como "HH:MM" en hora de Madrid (sin ICU ni tzdata)
 function horaDisplay_Madrid(d) {
   const local = new Date(d.getTime() + spainOffsetHours(d) * 3600000);
   return local.toISOString().slice(11, 16);
 }
 
+// Convierte un string UTC almacenado ("2026-06-15 21:51:00") a "HH:MM" Madrid
+function fmtMadrid(iso) {
+  if (!iso) return '—';
+  return horaDisplay_Madrid(new Date(iso.replace(' ', 'T') + 'Z'));
+}
+
 // Calcula horas de déficit acumuladas en el mes actual para una trabajadora.
 // Solo cuenta días ya cerrados (excluyendo hoy). Devuelve 0 si tienen superávit.
 function calcularDeficitMes(trabajadoraId, horasDia) {
-  const hoy = todayLocal();
+  const hoy = todayMadrid();
   const mes = hoy.slice(0, 7);
   const r = db.prepare(
     `SELECT COALESCE(SUM(horas_trabajadas),0) AS total_h, COUNT(*) AS dias
@@ -171,13 +174,13 @@ app.post('/api/auth/admin/login', async (req, res) => {
 // ─── RUTAS DE TRABAJADORA ────────────────────────────────────────────────────────
 
 app.get('/api/fichar/estado', authWorker, (req, res) => {
-  const hoy    = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayLocal());
+  const hoy    = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayMadrid());
   const worker = queries.getTrabajadoraById.get(req.user.id);
 
   if (!hoy) return res.json({ estado: 'sin_fichar', fichaje: null, horas_dia: worker.horas_dia });
 
   if (!hoy.hora_salida) {
-    const totalPausasH = queries.getTotalPausasH.get(nowLocalISO(), hoy.id).total;
+    const totalPausasH = queries.getTotalPausasH.get(nowDB(), hoy.id).total;
     const pausaActiva  = queries.getPausaActiva.get(hoy.id);
     const deficit      = calcularDeficitMes(req.user.id, worker.horas_dia);
     const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia + deficit + totalPausasH);
@@ -186,13 +189,19 @@ app.get('/api/fichar/estado', authWorker, (req, res) => {
       fichaje: hoy,
       hora_fin_prevista: fin.toISOString(),
       hora_fin_display: horaDisplay_Madrid(fin),
+      hora_entrada_display: fmtMadrid(hoy.hora_entrada),
       en_pausa: !!pausaActiva,
       total_pausas_h: Math.round(totalPausasH * 100) / 100,
       deficit_hoy: Math.round(deficit * 100) / 100,
     });
   }
 
-  return res.json({ estado: 'jornada_completada', fichaje: hoy });
+  return res.json({
+    estado: 'jornada_completada',
+    fichaje: hoy,
+    hora_entrada_display: fmtMadrid(hoy.hora_entrada),
+    hora_salida_display: fmtMadrid(hoy.hora_salida),
+  });
 });
 
 app.post('/api/fichar/entrada', authWorker, (req, res) => {
@@ -203,7 +212,7 @@ app.post('/api/fichar/entrada', authWorker, (req, res) => {
     return res.status(403).json({ error: `No puedes fichar: estás en situación de ${worker.estado}.` });
   }
 
-  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayLocal());
+  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayMadrid());
 
   if (hoy && hoy.hora_salida) {
     return res.status(409).json({ error: 'Ya has completado tu jornada de hoy.' });
@@ -212,16 +221,18 @@ app.post('/api/fichar/entrada', authWorker, (req, res) => {
   if (hoy && !hoy.hora_salida) {
     const deficit = calcularDeficitMes(req.user.id, worker.horas_dia);
     const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia + deficit);
+    const finDisplay = horaDisplay_Madrid(fin);
     return res.json({
       estado: 'en_jornada', fichaje: hoy,
       hora_fin_prevista: fin.toISOString(),
-      hora_fin_display: horaDisplay_Madrid(fin),
+      hora_fin_display: finDisplay,
+      hora_entrada_display: fmtMadrid(hoy.hora_entrada),
       deficit_hoy: Math.round(deficit * 100) / 100,
-      mensaje: `Ya tienes la jornada iniciada. Finaliza a las ${horaDisplay_Madrid(fin)}.`,
+      mensaje: `Ya tienes la jornada iniciada. Finaliza a las ${finDisplay}.`,
     });
   }
 
-  const result  = queries.createFichaje.run(req.user.id, todayLocal(), nowLocalISO());
+  const result  = queries.createFichaje.run(req.user.id, todayMadrid(), nowDB());
   const fichaje = queries.getFichajeById.get(result.lastInsertRowid);
   const deficit = calcularDeficitMes(req.user.id, worker.horas_dia);
   const fin     = calcularHoraFin(fichaje.hora_entrada, worker.horas_dia + deficit);
@@ -231,6 +242,7 @@ app.post('/api/fichar/entrada', authWorker, (req, res) => {
     estado: 'en_jornada', fichaje,
     hora_fin_prevista: fin.toISOString(),
     hora_fin_display: finDisplay,
+    hora_entrada_display: fmtMadrid(fichaje.hora_entrada),
     deficit_hoy: Math.round(deficit * 100) / 100,
     mensaje: `Jornada iniciada. Tu jornada finaliza hoy a las ${finDisplay}. ¡Buena jornada!`,
   });
@@ -238,38 +250,37 @@ app.post('/api/fichar/entrada', authWorker, (req, res) => {
 
 // ── PAUSA ──────────────────────────────────────────────────────────────────────
 app.post('/api/fichar/pausa', authWorker, (req, res) => {
-  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayLocal());
+  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayMadrid());
   if (!hoy || hoy.hora_salida) return res.status(400).json({ error: 'No tienes jornada activa.' });
 
   const pausaActiva = queries.getPausaActiva.get(hoy.id);
   if (pausaActiva) return res.status(409).json({ error: 'Ya tienes una pausa activa. Reanuda primero.' });
 
-  queries.insertPausa.run(hoy.id, nowLocalISO());
-  const totalPausasH = queries.getTotalPausasH.get(nowLocalISO(), hoy.id).total;
+  queries.insertPausa.run(hoy.id, nowDB());
+  const totalPausasH = queries.getTotalPausasH.get(nowDB(), hoy.id).total;
   const worker = queries.getTrabajadoraById.get(req.user.id);
   const deficit = calcularDeficitMes(req.user.id, worker.horas_dia);
   const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia + deficit + totalPausasH);
   res.json({
     ok: true,
     estado: 'en_pausa',
-    fichaje: hoy,
     mensaje: 'Pausa iniciada. Pulsa REANUDAR cuando vuelvas.',
     hora_fin_prevista: fin.toISOString(),
     hora_fin_display: horaDisplay_Madrid(fin),
-    en_pausa: true,
+    hora_entrada_display: fmtMadrid(hoy.hora_entrada),
     deficit_hoy: Math.round(deficit * 100) / 100,
   });
 });
 
 app.post('/api/fichar/reanudar', authWorker, (req, res) => {
-  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayLocal());
+  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayMadrid());
   if (!hoy || hoy.hora_salida) return res.status(400).json({ error: 'No tienes jornada activa.' });
 
   const pausaActiva = queries.getPausaActiva.get(hoy.id);
   if (!pausaActiva) return res.status(409).json({ error: 'No tienes ninguna pausa activa.' });
 
-  queries.cerrarPausa.run(nowLocalISO(), hoy.id);
-  const totalPausasH = queries.getTotalPausasH.get(nowLocalISO(), hoy.id).total;
+  queries.cerrarPausa.run(nowDB(), hoy.id);
+  const totalPausasH = queries.getTotalPausasH.get(nowDB(), hoy.id).total;
   const worker = queries.getTrabajadoraById.get(req.user.id);
   const deficit = calcularDeficitMes(req.user.id, worker.horas_dia);
   const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia + deficit + totalPausasH);
@@ -277,43 +288,50 @@ app.post('/api/fichar/reanudar', authWorker, (req, res) => {
   res.json({
     ok: true,
     estado: 'en_jornada',
-    fichaje: hoy,
     mensaje: `Bienvenida de nuevo. Tu jornada finaliza ahora a las ${finDisplay}.`,
     hora_fin_prevista: fin.toISOString(),
     hora_fin_display: finDisplay,
-    en_pausa: false,
+    hora_entrada_display: fmtMadrid(hoy.hora_entrada),
     deficit_hoy: Math.round(deficit * 100) / 100,
   });
 });
 
 // ── FINALIZAR JORNADA ANTES (trabajadora) ──────────────────────────────────────
 app.post('/api/fichar/salida', authWorker, (req, res) => {
-  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayLocal());
+  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayMadrid());
   if (!hoy) return res.status(404).json({ error: 'No tienes jornada iniciada hoy.' });
   if (hoy.hora_salida) return res.status(409).json({ error: 'Tu jornada ya está cerrada.' });
 
   // Cerrar pausa activa si la hay
   const pausaActiva = queries.getPausaActiva.get(hoy.id);
-  if (pausaActiva) queries.cerrarPausa.run(nowLocalISO(), hoy.id);
+  if (pausaActiva) queries.cerrarPausa.run(nowDB(), hoy.id);
 
-  const s  = nowLocalISO();
+  const s  = nowDB();
   const ht = calcularHorasTrabajadas(hoy.hora_entrada, s);
   queries.closeFichaje.run(s, ht, 0, hoy.id);
   const updated = queries.getFichajeById.get(hoy.id);
-  const horaFmt = s.slice(11, 16);
+  const horaFmt = fmtMadrid(s);
   res.json({
     estado: 'jornada_completada',
     fichaje: updated,
+    hora_entrada_display: fmtMadrid(updated.hora_entrada),
+    hora_salida_display: horaFmt,
     mensaje: `Jornada finalizada a las ${horaFmt}. ¡Descansa, hasta mañana!`,
   });
 });
 
 app.get('/api/historial', authWorker, (req, res) => {
-  const historial    = queries.getHistorialMes.all(nowLocalISO(), req.user.id, todayLocal().slice(0, 7));
+  const historial    = queries.getHistorialMes.all(nowDB(), req.user.id, todayMadrid().slice(0, 7));
   const worker       = queries.getTrabajadoraById.get(req.user.id);
   const totalHoras   = historial.filter(f => f.hora_salida).reduce((a, f) => a + (f.horas_trabajadas || 0), 0);
+  // Añadir campos de display Madrid a cada fichaje
+  const historialDisplay = historial.map(f => ({
+    ...f,
+    hora_entrada_display: fmtMadrid(f.hora_entrada),
+    hora_salida_display: fmtMadrid(f.hora_salida),
+  }));
   res.json({
-    fichajes: historial,
+    fichajes: historialDisplay,
     total_horas: Math.round(totalHoras * 100) / 100,
     horas_dia_contrato: worker.horas_dia,
     dias_mes_contrato: worker.dias_mes,
@@ -325,7 +343,7 @@ app.get('/api/historial', authWorker, (req, res) => {
 app.get('/api/admin/dashboard', authAdmin, (req, res) => {
   const empresas = queries.getAllEmpresas.all();
   const result = empresas.map(emp => {
-    const trabajadoras = queries.getEstadoHoyByEmpresa.all(todayLocal(), emp.id);
+    const trabajadoras = queries.getEstadoHoyByEmpresa.all(todayMadrid(), emp.id);
     const stats = { total: 0, fichadas: 0, jornada_completada: 0, sin_fichar: 0, it_baja: 0, alerta: 0 };
     stats.total = trabajadoras.length;
     trabajadoras.forEach(t => {
@@ -336,13 +354,13 @@ app.get('/api/admin/dashboard', authAdmin, (req, res) => {
     });
     return { empresa: emp, stats, trabajadoras };
   });
-  res.json({ fecha: todayLocal(), empresas: result });
+  res.json({ fecha: todayMadrid(), empresas: result });
 });
 
 app.get('/api/admin/empresas', authAdmin, (req, res) => res.json(queries.getAllEmpresas.all()));
 
 app.get('/api/admin/empresas/:id/trabajadoras', authAdmin, (req, res) =>
-  res.json(queries.getEstadoHoyByEmpresa.all(todayLocal(), req.params.id)));
+  res.json(queries.getEstadoHoyByEmpresa.all(todayMadrid(), req.params.id)));
 
 app.get('/api/admin/trabajadoras', authAdmin, (req, res) =>
   res.json(queries.getAllTrabajadoras.all()));
@@ -362,9 +380,6 @@ app.post('/api/admin/trabajadoras', authAdmin, async (req, res) => {
   const digits   = dniUpper.replace(/[^0-9]/g, '');
   const pinHash  = await bcrypt.hash(digits.length >= 4 ? digits.slice(-4) : '1234', 10);
 
-  const crypto = require('crypto');
-  const tokenAcceso = crypto.randomBytes(5).toString('hex');
-
   try {
     const result = queries.insertTrabajadora.run({
       empresa_id, nombre, dni: dniUpper, pin: pinHash,
@@ -375,7 +390,6 @@ app.post('/api/admin/trabajadoras', authAdmin, async (req, res) => {
       estado: estado || 'activa',
       observaciones: observaciones || null,
     });
-    db.prepare('UPDATE trabajadoras SET token_acceso = ? WHERE id = ?').run(tokenAcceso, result.lastInsertRowid);
     queries.insertAudit.run(req.user.username, 'ALTA_TRABAJADORA', 'trabajadoras', result.lastInsertRowid, null, JSON.stringify(req.body));
     res.json({ id: result.lastInsertRowid, mensaje: 'Trabajadora dada de alta correctamente' });
   } catch (err) {
@@ -440,7 +454,7 @@ app.put('/api/admin/fichajes/:id', authAdmin, (req, res) => {
   const salidaFinal  = hora_salida  ?? prev.hora_salida;
   const horas = (entradaFinal && salidaFinal) ? calcularHorasTrabajadas(entradaFinal, salidaFinal) : prev.horas_trabajadas;
 
-  queries.updateFichaje.run({ id: req.params.id, hora_entrada: entradaFinal, hora_salida: salidaFinal, horas_trabajadas: horas, observaciones: observaciones ?? prev.observaciones, admin: req.user.username, modificado_en: nowLocalISO(), razon: razon.trim() });
+  queries.updateFichaje.run({ id: req.params.id, hora_entrada: entradaFinal, hora_salida: salidaFinal, horas_trabajadas: horas, observaciones: observaciones ?? prev.observaciones, admin: req.user.username, modificado_en: nowDB(), razon: razon.trim() });
   queries.insertAudit.run(req.user.username, 'CORRECCION_FICHAJE', 'fichajes', req.params.id, JSON.stringify(prev), JSON.stringify(req.body));
   res.json({ mensaje: 'Fichaje corregido' });
 });
@@ -529,67 +543,18 @@ cron.schedule('* * * * *', () => {
   const ahora    = new Date();
   abiertos.forEach(f => {
     const pausaActiva  = queries.getPausaActiva.get(f.id);
-    const totalPausasH = queries.getTotalPausasH.get(nowLocalISO(), f.id).total;
+    const ahora_db     = nowDB();
+    const totalPausasH = queries.getTotalPausasH.get(ahora_db, f.id).total;
     const deficit      = calcularDeficitMes(f.trabajadora_id, f.horas_dia);
     const fin = calcularHoraFin(f.hora_entrada, f.horas_dia + deficit + totalPausasH);
     if (ahora >= fin) {
-      if (pausaActiva) queries.cerrarPausa.run(nowLocalISO(), f.id);
-      const salidaLocal = new Date(fin.getTime() + spainOffsetHours(fin) * 3600000);
-      const salidaISO   = salidaLocal.toISOString().slice(0, 19).replace('T', ' ');
+      if (pausaActiva) queries.cerrarPausa.run(nowDB(), f.id);
+      const salidaISO = fin.toISOString().replace('T', ' ').slice(0, 19);
       queries.closeFichaje.run(salidaISO, calcularHorasTrabajadas(f.hora_entrada, salidaISO), 1, f.id);
       console.log(`[CRON] Cierre automático: ${f.trabajadora_nombre} a las ${horaDisplay_Madrid(fin)}${deficit > 0 ? ` (+${decimalToHHMM(deficit)} compensación)` : ''}`);
-      smsFin(f.telefono, horaDisplay_Madrid(fin));
+      smsFin(f.telefono, fin);
     }
   });
-});
-
-// ─── ENLACES DIRECTOS / QR ───────────────────────────────────────────────────────
-
-// GET /api/worker-token/:token — login por enlace personal o QR
-app.get('/api/worker-token/:token', (req, res) => {
-  const worker = db.prepare(
-    `SELECT t.*, e.nombre AS empresa_nombre FROM trabajadoras t
-     JOIN empresas e ON t.empresa_id = e.id
-     WHERE t.token_acceso = ? AND t.activa = 1`
-  ).get(req.params.token);
-  if (!worker) return res.status(404).json({ error: 'Enlace no válido o trabajadora inactiva' });
-  const jwtToken = jwt.sign(
-    { id: worker.id, role: 'worker', nombre: worker.nombre, empresa: worker.empresa_nombre },
-    SECRET,
-    { expiresIn: '24h' }
-  );
-  res.json({ token: jwtToken, nombre: worker.nombre, empresa: worker.empresa_nombre });
-});
-
-// GET /api/debug/tz — diagnóstico de zona horaria (solo para verificar)
-app.get('/api/debug/tz', (req, res) => {
-  const d = new Date();
-  res.json({
-    utc_now:       d.toISOString(),
-    madrid_now:    nowLocalISO(),
-    today_local:   todayLocal(),
-    spain_offset:  spainOffsetHours(d),
-    tz_env:        process.env.TZ || '(no definido)',
-    node_version:  process.version,
-  });
-});
-
-// POST /api/admin/empresas — crear nueva empresa
-app.post('/api/admin/empresas', authAdmin, (req, res) => {
-  const { nombre, nif, ccc } = req.body;
-  if (!nombre || !nif || !ccc) return res.status(400).json({ error: 'Nombre, NIF y CCC obligatorios' });
-  const result = db.prepare('INSERT INTO empresas (nombre, nif, ccc) VALUES (?, ?, ?)').run(nombre, nif, ccc);
-  queries.insertAudit.run(req.user.username, 'ALTA_EMPRESA', 'empresas', result.lastInsertRowid, null, JSON.stringify(req.body));
-  res.json({ id: result.lastInsertRowid, mensaje: 'Empresa creada' });
-});
-
-// POST /api/admin/trabajadoras/:id/regenerate-token — renovar enlace personal
-app.post('/api/admin/trabajadoras/:id/regenerate-token', authAdmin, (req, res) => {
-  const crypto = require('crypto');
-  const newToken = crypto.randomBytes(5).toString('hex');
-  db.prepare('UPDATE trabajadoras SET token_acceso = ? WHERE id = ?').run(newToken, req.params.id);
-  queries.insertAudit.run(req.user.username, 'REGENERAR_TOKEN', 'trabajadoras', req.params.id, null, JSON.stringify({ token_acceso: newToken }));
-  res.json({ token_acceso: newToken, mensaje: 'Enlace regenerado correctamente' });
 });
 
 // ─── SPA FALLBACK ────────────────────────────────────────────────────────────────
