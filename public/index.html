@@ -216,7 +216,7 @@ function renderEstado(data){
   const card=document.getElementById('estado-card');
   if(data.estado==='jornada_completada'){
     card.className='estado-card card-completada';
-    const hSal=fmtH(data.fichaje.hora_salida);
+    const hSal=data.hora_salida_display||fmtH(data.fichaje.hora_salida);
     const autoCierre=data.fichaje.cerrado_automaticamente;
     const modoTexto=autoCierre?'El sistema ha registrado automáticamente tu salida.':'Has finalizado tu jornada voluntariamente.';
     card.innerHTML=`
@@ -224,18 +224,18 @@ function renderEstado(data){
       <div class="estado-title">JORNADA FINALIZADA</div>
       <div class="hora-fin-badge" style="background:var(--success);margin-bottom:4px">${hSal}</div>
       <div style="font-size:12px;color:var(--gray-500);margin-bottom:6px">${modoTexto}</div>
-      <div style="font-size:13px;color:var(--gray-600)">Entrada: <strong>${fmtH(data.fichaje.hora_entrada)}</strong> &nbsp;·&nbsp; Total: <strong>${decHM(data.fichaje.horas_trabajadas)}</strong></div>
+      <div style="font-size:13px;color:var(--gray-600)">Entrada: <strong>${data.hora_entrada_display||'—'}</strong> &nbsp;·&nbsp; Total: <strong>${decHM(data.fichaje.horas_trabajadas)}</strong></div>
       <div class="fin-aviso">🚫 Su jornada laboral ha concluido.<br>No puede continuar trabajando hoy.<br>¡Descanse! Hasta mañana 🙌</div>
       <div class="fin-legal">⚖️ <strong>Recuerde:</strong> Su contrato únicamente contempla las horas pactadas. Trabajar más allá de la jornada contratada sin autorización expresa de la empresa no está permitido. Los servicios deben prestarse exclusivamente en los centros de trabajo asignados. El registro de jornada queda archivado conforme al RD-ley 8/2019.</div>`;
     if(countdownInterval)clearInterval(countdownInterval);
   }else if(data.estado==='en_pausa'){
     card.className='estado-card card-en-pausa';
-    card.innerHTML=`<div class="estado-icon">⏸️</div><div class="estado-title">En pausa</div><div class="estado-sub">Inicio jornada: <strong>${fmtH(data.fichaje.hora_entrada)}</strong></div><div class="pausa-badge">⏸ PAUSA ACTIVA</div><div class="hora-fin-badge" id="fin-badge" style="background:var(--warning)">${data.hora_fin_display||'—'}</div><div class="countdown-sub" id="fin-countdown">Fin previsto (pausas incluidas)</div><button id="btn-reanudar" onclick="doReanudar()">▶ REANUDAR JORNADA</button>`;
+    card.innerHTML=`<div class="estado-icon">⏸️</div><div class="estado-title">En pausa</div><div class="estado-sub">Inicio jornada: <strong>${data.hora_entrada_display||'—'}</strong></div><div class="pausa-badge">⏸ PAUSA ACTIVA</div><div class="hora-fin-badge" id="fin-badge" style="background:var(--warning)">${data.hora_fin_display||'—'}</div><div class="countdown-sub" id="fin-countdown">Fin previsto (pausas incluidas)</div><button id="btn-reanudar" onclick="doReanudar()">▶ REANUDAR JORNADA</button>`;
     startCountdown(data.hora_fin_prevista);
   }else if(data.estado==='en_jornada'){
     card.className='estado-card card-en-jornada';
     const extraInfo=data.deficit_hoy>0?`<div style="font-size:12px;color:var(--warning);margin-top:4px">+${decHM(data.deficit_hoy)} de compensación incluida</div>`:'';
-    card.innerHTML=`<div class="estado-icon">⏱️</div><div class="estado-title">En jornada</div><div class="estado-sub">Inicio: <strong>${fmtH(data.fichaje.hora_entrada)}</strong></div><div class="hora-fin-badge" id="fin-badge">${data.hora_fin_display||'—'}</div><div class="countdown-sub" id="fin-countdown">Hora de fin</div>${extraInfo}<button id="btn-pausa" onclick="doPausa()">⏸ PAUSA (descanso / comida)</button><button id="btn-finalizar" onclick="doFinalizar()">🏁 FINALIZAR JORNADA ANTES</button>`;
+    card.innerHTML=`<div class="estado-icon">⏱️</div><div class="estado-title">En jornada</div><div class="estado-sub">Inicio: <strong>${data.hora_entrada_display||'—'}</strong></div><div class="hora-fin-badge" id="fin-badge">${data.hora_fin_display||'—'}</div><div class="countdown-sub" id="fin-countdown">Hora de fin</div>${extraInfo}<button id="btn-pausa" onclick="doPausa()">⏸ PAUSA (descanso / comida)</button><button id="btn-finalizar" onclick="doFinalizar()">🏁 FINALIZAR JORNADA ANTES</button>`;
     startCountdown(data.hora_fin_prevista);
   }else{
     card.className='estado-card';
