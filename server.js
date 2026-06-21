@@ -19,7 +19,6 @@ const jwt      = require('jsonwebtoken');
 const cron     = require('node-cron');
 const PDFDoc   = require('pdfkit');
 const path     = require('path');
-const fs       = require('fs');
 
 const { db, queries, decimalToHHMM, calcularHoraFin, calcularHorasTrabajadas, horaDisplay } = require('./database');
 const { smsFin } = require('./sms');
@@ -59,60 +58,24 @@ function authAdmin(req, res, next) {
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────────
 
-// nowDB(): UTC puro para almacenar en DB. fmtMadrid/fmtH en el cliente convierte a hora Madrid.
-// No depende de TZ del sistema ni de ICU/tzdata — funciona en Alpine sin configuración.
-function nowDB() {
-  return new Date().toISOString().replace('T', ' ').slice(0, 19);
+// Hora actual en Europe/Madrid como string 'YYYY-MM-DD HH:MM:SS'
+// Usa la API Intl con timezone explícito — no depende de process.env.TZ ni de SQLite localtime
+function nowMadrid() {
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Madrid' }).slice(0, 19);
 }
 
-// todayMadrid(): fecha actual en zona horaria de Madrid para el campo fecha del fichaje.
 function todayMadrid() {
-  const now = new Date();
-  return new Date(now.getTime() + spainOffsetHours(now) * 3600000).toISOString().slice(0, 10);
+  return nowMadrid().slice(0, 10);
 }
 
-// Calcula el offset UTC de España (+1 CET, +2 CEST) — aritmética pura UTC, sin tzdata/ICU
-function spainOffsetHours(d) {
-  const d_ = d || new Date();
-  const y = d_.getUTCFullYear();
-  // CEST: último domingo de marzo a las 01:00 UTC
-  const cest = new Date(Date.UTC(y, 2, 31, 1, 0, 0));
-  while (cest.getUTCDay() !== 0) cest.setUTCDate(cest.getUTCDate() - 1);
-  // CET: último domingo de octubre a las 01:00 UTC
-  const cet = new Date(Date.UTC(y, 9, 31, 1, 0, 0));
-  while (cet.getUTCDay() !== 0) cet.setUTCDate(cet.getUTCDate() - 1);
-  return (d_ >= cest && d_ < cet) ? 2 : 1;
+function horaDisplay(isoStr) {
+  if (!isoStr) return '—';
+  return isoStr.slice(11, 16);
 }
 
-// Formatea un Date UTC como "HH:MM" en hora de Madrid (sin ICU ni tzdata)
-function horaDisplay_Madrid(d) {
-  const local = new Date(d.getTime() + spainOffsetHours(d) * 3600000);
-  return local.toISOString().slice(11, 16);
-}
+// ─── RUTAS DE AUTENTICACIÓN ──────────────────────────────────────────────────────
 
-// Convierte un string UTC almacenado ("2026-06-15 21:51:00") a "HH:MM" Madrid
-function fmtMadrid(iso) {
-  if (!iso) return '—';
-  return horaDisplay_Madrid(new Date(iso.replace(' ', 'T') + 'Z'));
-}
-
-// Calcula horas de déficit acumuladas en el mes actual para una trabajadora.
-// Solo cuenta días ya cerrados (excluyendo hoy). Devuelve 0 si tienen superávit.
-function calcularDeficitMes(trabajadoraId, horasDia) {
-  const hoy = todayMadrid();
-  const mes = hoy.slice(0, 7);
-  const r = db.prepare(
-    `SELECT COALESCE(SUM(horas_trabajadas),0) AS total_h, COUNT(*) AS dias
-     FROM fichajes
-     WHERE trabajadora_id=? AND strftime('%Y-%m',fecha)=? AND hora_salida IS NOT NULL AND fecha<?`
-  ).get(trabajadoraId, mes, hoy);
-  const deficit = (horasDia * r.dias) - r.total_h;
-  return deficit > 0 ? Math.round(deficit * 1000) / 1000 : 0;
-}
-
-// ─── RUTAS PÚBLICAS ──────────────────────────────────────────────────────────────
-
-// GET /api/trabajadoras-publico — lista de empresas y trabajadoras (sin datos sensibles)
+// GET /api/trabajadoras-publico — lista pública de empresas y trabajadoras (sin datos sensibles)
 app.get('/api/trabajadoras-publico', (req, res) => {
   const empresas = queries.getAllEmpresas.all();
   const result = empresas.map(emp => ({
@@ -127,7 +90,7 @@ app.get('/api/trabajadoras-publico', (req, res) => {
   res.json(result);
 });
 
-// POST /api/auth/login — trabajadora sin contraseña (solo ID)
+// POST /api/auth/login — trabajadora sin contraseña (solo ID de trabajadora)
 app.post('/api/auth/login', (req, res) => {
   const { trabajadora_id } = req.body || {};
   if (!trabajadora_id) return res.status(400).json({ error: 'Falta el identificador de trabajadora' });
@@ -154,13 +117,13 @@ app.post('/api/auth/login', (req, res) => {
 // POST /api/auth/admin/login — administrador Webgest
 app.post('/api/auth/admin/login', async (req, res) => {
   const { username, password } = req.body || {};
-  if (!username || !password) return res.status(400).json({ error: 'Credenciales requeridas' });
+  if (!username || !password) return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
 
   const admin = queries.getAdminByUsername.get(username.trim());
-  if (!admin) return res.status(401).json({ error: 'Contraseña incorrecta' });
+  if (!admin) return res.status(401).json({ error: 'Credenciales incorrectas' });
 
   const ok = await bcrypt.compare(password, admin.password);
-  if (!ok) return res.status(401).json({ error: 'Contraseña incorrecta' });
+  if (!ok) return res.status(401).json({ error: 'Credenciales incorrectas' });
 
   const token = jwt.sign(
     { id: admin.id, role: 'admin', username: admin.username, nombre: admin.nombre },
@@ -173,165 +136,89 @@ app.post('/api/auth/admin/login', async (req, res) => {
 
 // ─── RUTAS DE TRABAJADORA ────────────────────────────────────────────────────────
 
+// GET /api/fichar/estado — estado actual del día
 app.get('/api/fichar/estado', authWorker, (req, res) => {
-  const hoy    = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayMadrid());
+  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayMadrid());
   const worker = queries.getTrabajadoraById.get(req.user.id);
 
-  if (!hoy) return res.json({ estado: 'sin_fichar', fichaje: null, horas_dia: worker.horas_dia });
+  if (!hoy) {
+    return res.json({ estado: 'sin_fichar', fichaje: null, horas_dia: worker.horas_dia });
+  }
 
   if (!hoy.hora_salida) {
-    const totalPausasH = queries.getTotalPausasH.get(nowDB(), hoy.id).total;
-    const pausaActiva  = queries.getPausaActiva.get(hoy.id);
-    const deficit      = calcularDeficitMes(req.user.id, worker.horas_dia);
-    const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia + deficit + totalPausasH);
+    const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia);
     return res.json({
-      estado: pausaActiva ? 'en_pausa' : 'en_jornada',
+      estado: 'en_jornada',
       fichaje: hoy,
       hora_fin_prevista: fin.toISOString(),
-      hora_fin_display: horaDisplay_Madrid(fin),
-      hora_entrada_display: fmtMadrid(hoy.hora_entrada),
-      en_pausa: !!pausaActiva,
-      total_pausas_h: Math.round(totalPausasH * 100) / 100,
-      deficit_hoy: Math.round(deficit * 100) / 100,
+      hora_fin_display: fin.toLocaleTimeString('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit' }),
     });
   }
 
-  return res.json({
-    estado: 'jornada_completada',
-    fichaje: hoy,
-    hora_entrada_display: fmtMadrid(hoy.hora_entrada),
-    hora_salida_display: fmtMadrid(hoy.hora_salida),
-  });
+  return res.json({ estado: 'jornada_completada', fichaje: hoy });
 });
 
+// POST /api/fichar/entrada — fichar entrada
 app.post('/api/fichar/entrada', authWorker, (req, res) => {
   const worker = queries.getTrabajadoraById.get(req.user.id);
+
   if (!worker) return res.status(404).json({ error: 'Trabajadora no encontrada' });
 
+  // Bloquear si está en IT o baja
   if (worker.estado === 'IT' || worker.estado === 'baja') {
     return res.status(403).json({ error: `No puedes fichar: estás en situación de ${worker.estado}.` });
   }
 
-  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayMadrid());
+  // Comprobar si ya fichó hoy
+  const hoyStr = todayMadrid();
+  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, hoyStr);
 
   if (hoy && hoy.hora_salida) {
     return res.status(409).json({ error: 'Ya has completado tu jornada de hoy.' });
   }
 
   if (hoy && !hoy.hora_salida) {
-    const deficit = calcularDeficitMes(req.user.id, worker.horas_dia);
-    const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia + deficit);
-    const finDisplay = horaDisplay_Madrid(fin);
+    // Ya hay fichaje abierto
+    const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia);
+    const finDisplay = fin.toLocaleTimeString('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit' });
     return res.json({
-      estado: 'en_jornada', fichaje: hoy,
+      estado: 'en_jornada',
+      fichaje: hoy,
       hora_fin_prevista: fin.toISOString(),
       hora_fin_display: finDisplay,
-      hora_entrada_display: fmtMadrid(hoy.hora_entrada),
-      deficit_hoy: Math.round(deficit * 100) / 100,
-      mensaje: `Ya tienes la jornada iniciada. Finaliza a las ${finDisplay}.`,
+      mensaje: `Ya tienes la jornada iniciada. Finaliza hoy a las ${finDisplay}.`,
     });
   }
 
-  const result  = queries.createFichaje.run(req.user.id, todayMadrid(), nowDB());
+  // Crear nuevo fichaje — hora tomada en JavaScript con timezone explícito Europe/Madrid
+  const ahora = nowMadrid();
+  const result = queries.createFichaje.run(req.user.id, hoyStr, ahora);
   const fichaje = queries.getFichajeById.get(result.lastInsertRowid);
-  const deficit = calcularDeficitMes(req.user.id, worker.horas_dia);
-  const fin     = calcularHoraFin(fichaje.hora_entrada, worker.horas_dia + deficit);
-  const finDisplay = horaDisplay_Madrid(fin);
+
+  const fin = calcularHoraFin(fichaje.hora_entrada, worker.horas_dia);
+  const finDisplay = fin.toLocaleTimeString('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit' });
 
   res.json({
-    estado: 'en_jornada', fichaje,
+    estado: 'en_jornada',
+    fichaje,
     hora_fin_prevista: fin.toISOString(),
     hora_fin_display: finDisplay,
-    hora_entrada_display: fmtMadrid(fichaje.hora_entrada),
-    deficit_hoy: Math.round(deficit * 100) / 100,
     mensaje: `Jornada iniciada. Tu jornada finaliza hoy a las ${finDisplay}. ¡Buena jornada!`,
   });
 });
 
-// ── PAUSA ──────────────────────────────────────────────────────────────────────
-app.post('/api/fichar/pausa', authWorker, (req, res) => {
-  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayMadrid());
-  if (!hoy || hoy.hora_salida) return res.status(400).json({ error: 'No tienes jornada activa.' });
-
-  const pausaActiva = queries.getPausaActiva.get(hoy.id);
-  if (pausaActiva) return res.status(409).json({ error: 'Ya tienes una pausa activa. Reanuda primero.' });
-
-  queries.insertPausa.run(hoy.id, nowDB());
-  const totalPausasH = queries.getTotalPausasH.get(nowDB(), hoy.id).total;
-  const worker = queries.getTrabajadoraById.get(req.user.id);
-  const deficit = calcularDeficitMes(req.user.id, worker.horas_dia);
-  const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia + deficit + totalPausasH);
-  res.json({
-    ok: true,
-    estado: 'en_pausa',
-    mensaje: 'Pausa iniciada. Pulsa REANUDAR cuando vuelvas.',
-    hora_fin_prevista: fin.toISOString(),
-    hora_fin_display: horaDisplay_Madrid(fin),
-    hora_entrada_display: fmtMadrid(hoy.hora_entrada),
-    deficit_hoy: Math.round(deficit * 100) / 100,
-  });
-});
-
-app.post('/api/fichar/reanudar', authWorker, (req, res) => {
-  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayMadrid());
-  if (!hoy || hoy.hora_salida) return res.status(400).json({ error: 'No tienes jornada activa.' });
-
-  const pausaActiva = queries.getPausaActiva.get(hoy.id);
-  if (!pausaActiva) return res.status(409).json({ error: 'No tienes ninguna pausa activa.' });
-
-  queries.cerrarPausa.run(nowDB(), hoy.id);
-  const totalPausasH = queries.getTotalPausasH.get(nowDB(), hoy.id).total;
-  const worker = queries.getTrabajadoraById.get(req.user.id);
-  const deficit = calcularDeficitMes(req.user.id, worker.horas_dia);
-  const fin = calcularHoraFin(hoy.hora_entrada, worker.horas_dia + deficit + totalPausasH);
-  const finDisplay = horaDisplay_Madrid(fin);
-  res.json({
-    ok: true,
-    estado: 'en_jornada',
-    mensaje: `Bienvenida de nuevo. Tu jornada finaliza ahora a las ${finDisplay}.`,
-    hora_fin_prevista: fin.toISOString(),
-    hora_fin_display: finDisplay,
-    hora_entrada_display: fmtMadrid(hoy.hora_entrada),
-    deficit_hoy: Math.round(deficit * 100) / 100,
-  });
-});
-
-// ── FINALIZAR JORNADA ANTES (trabajadora) ──────────────────────────────────────
-app.post('/api/fichar/salida', authWorker, (req, res) => {
-  const hoy = queries.getFichajeHoyByTrabajadora.get(req.user.id, todayMadrid());
-  if (!hoy) return res.status(404).json({ error: 'No tienes jornada iniciada hoy.' });
-  if (hoy.hora_salida) return res.status(409).json({ error: 'Tu jornada ya está cerrada.' });
-
-  // Cerrar pausa activa si la hay
-  const pausaActiva = queries.getPausaActiva.get(hoy.id);
-  if (pausaActiva) queries.cerrarPausa.run(nowDB(), hoy.id);
-
-  const s  = nowDB();
-  const ht = calcularHorasTrabajadas(hoy.hora_entrada, s);
-  queries.closeFichaje.run(s, ht, 0, hoy.id);
-  const updated = queries.getFichajeById.get(hoy.id);
-  const horaFmt = fmtMadrid(s);
-  res.json({
-    estado: 'jornada_completada',
-    fichaje: updated,
-    hora_entrada_display: fmtMadrid(updated.hora_entrada),
-    hora_salida_display: horaFmt,
-    mensaje: `Jornada finalizada a las ${horaFmt}. ¡Descansa, hasta mañana!`,
-  });
-});
-
+// GET /api/historial — historial del mes en curso
 app.get('/api/historial', authWorker, (req, res) => {
-  const historial    = queries.getHistorialMes.all(nowDB(), req.user.id, todayMadrid().slice(0, 7));
-  const worker       = queries.getTrabajadoraById.get(req.user.id);
-  const totalHoras   = historial.filter(f => f.hora_salida).reduce((a, f) => a + (f.horas_trabajadas || 0), 0);
-  // Añadir campos de display Madrid a cada fichaje
-  const historialDisplay = historial.map(f => ({
-    ...f,
-    hora_entrada_display: fmtMadrid(f.hora_entrada),
-    hora_salida_display: fmtMadrid(f.hora_salida),
-  }));
+  const mesActual = todayMadrid().slice(0, 7);
+  const historial = queries.getHistorialMes.all(nowMadrid(), req.user.id, mesActual);
+  const worker = queries.getTrabajadoraById.get(req.user.id);
+
+  const totalHoras = historial
+    .filter(f => f.hora_salida)
+    .reduce((acc, f) => acc + (f.horas_trabajadas || 0), 0);
+
   res.json({
-    fichajes: historialDisplay,
+    fichajes: historial,
     total_horas: Math.round(totalHoras * 100) / 100,
     horas_dia_contrato: worker.horas_dia,
     dias_mes_contrato: worker.dias_mes,
@@ -340,45 +227,75 @@ app.get('/api/historial', authWorker, (req, res) => {
 
 // ─── RUTAS DE ADMINISTRACIÓN ─────────────────────────────────────────────────────
 
+// GET /api/admin/dashboard — vista general de todas las empresas
 app.get('/api/admin/dashboard', authAdmin, (req, res) => {
   const empresas = queries.getAllEmpresas.all();
+  const hoy = todayMadrid();
+
   const result = empresas.map(emp => {
-    const trabajadoras = queries.getEstadoHoyByEmpresa.all(todayMadrid(), emp.id);
-    const stats = { total: 0, fichadas: 0, jornada_completada: 0, sin_fichar: 0, it_baja: 0, alerta: 0 };
-    stats.total = trabajadoras.length;
+    const trabajadoras = queries.getEstadoHoyByEmpresa.all(hoy, emp.id);
+    const stats = {
+      total: trabajadoras.length,
+      fichadas: 0,
+      jornada_completada: 0,
+      sin_fichar: 0,
+      it_baja: 0,
+      alerta: 0,
+    };
+
     trabajadoras.forEach(t => {
-      if (['IT','baja','vacaciones'].includes(t.estado)) stats.it_baja++;
-      else if (t.hora_entrada && !t.hora_salida)         stats.fichadas++;
-      else if (t.hora_salida)                            stats.jornada_completada++;
-      else                                               { stats.sin_fichar++; stats.alerta++; }
+      if (t.estado === 'IT' || t.estado === 'baja' || t.estado === 'vacaciones') {
+        stats.it_baja++;
+      } else if (t.hora_entrada && !t.hora_salida) {
+        stats.fichadas++;
+      } else if (t.hora_salida) {
+        stats.jornada_completada++;
+      } else {
+        stats.sin_fichar++;
+        stats.alerta++;
+      }
     });
+
     return { empresa: emp, stats, trabajadoras };
   });
-  res.json({ fecha: todayMadrid(), empresas: result });
+
+  res.json({ fecha: hoy, empresas: result });
 });
 
-app.get('/api/admin/empresas', authAdmin, (req, res) => res.json(queries.getAllEmpresas.all()));
+// GET /api/admin/empresas — lista de empresas
+app.get('/api/admin/empresas', authAdmin, (req, res) => {
+  res.json(queries.getAllEmpresas.all());
+});
 
-app.get('/api/admin/empresas/:id/trabajadoras', authAdmin, (req, res) =>
-  res.json(queries.getEstadoHoyByEmpresa.all(todayMadrid(), req.params.id)));
+// GET /api/admin/empresas/:id/trabajadoras — trabajadoras de empresa con estado hoy
+app.get('/api/admin/empresas/:id/trabajadoras', authAdmin, (req, res) => {
+  const trabajadoras = queries.getEstadoHoyByEmpresa.all(req.params.id);
+  res.json(trabajadoras);
+});
 
-app.get('/api/admin/trabajadoras', authAdmin, (req, res) =>
-  res.json(queries.getAllTrabajadoras.all()));
+// GET /api/admin/trabajadoras — todas las trabajadoras
+app.get('/api/admin/trabajadoras', authAdmin, (req, res) => {
+  res.json(queries.getAllTrabajadoras.all());
+});
 
+// GET /api/admin/trabajadoras/:id — detalle de trabajadora
 app.get('/api/admin/trabajadoras/:id', authAdmin, (req, res) => {
   const t = queries.getTrabajadoraById.get(req.params.id);
   if (!t) return res.status(404).json({ error: 'No encontrada' });
   res.json(t);
 });
 
+// POST /api/admin/trabajadoras — alta nueva trabajadora
 app.post('/api/admin/trabajadoras', authAdmin, async (req, res) => {
-  const { empresa_id, nombre, dni, telefono, horas_dia, dias_mes, tipo_jornada, estado, observaciones } = req.body;
-  if (!empresa_id || !nombre || !dni || !horas_dia)
+  const { empresa_id, nombre, dni, telefono, horas_dia, dias_mes,
+          tipo_jornada, estado, observaciones, pin } = req.body;
+
+  if (!empresa_id || !nombre || !dni || !horas_dia) {
     return res.status(400).json({ error: 'Faltan campos obligatorios' });
+  }
 
   const dniUpper = dni.trim().toUpperCase();
-  const digits   = dniUpper.replace(/[^0-9]/g, '');
-  const pinHash  = await bcrypt.hash(digits.length >= 4 ? digits.slice(-4) : '1234', 10);
+  const pinHash = await bcrypt.hash(pin || defaultPin(dniUpper), 10);
 
   try {
     const result = queries.insertTrabajadora.run({
@@ -390,18 +307,25 @@ app.post('/api/admin/trabajadoras', authAdmin, async (req, res) => {
       estado: estado || 'activa',
       observaciones: observaciones || null,
     });
-    queries.insertAudit.run(req.user.username, 'ALTA_TRABAJADORA', 'trabajadoras', result.lastInsertRowid, null, JSON.stringify(req.body));
+    queries.insertAudit.run(req.user.username, 'ALTA_TRABAJADORA', 'trabajadoras',
+      result.lastInsertRowid, null, JSON.stringify(req.body));
     res.json({ id: result.lastInsertRowid, mensaje: 'Trabajadora dada de alta correctamente' });
   } catch (err) {
-    if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'DNI ya existe en el sistema' });
+    if (err.message.includes('UNIQUE')) {
+      return res.status(409).json({ error: 'DNI ya existe en el sistema' });
+    }
     throw err;
   }
 });
 
+// PUT /api/admin/trabajadoras/:id — modificar trabajadora
 app.put('/api/admin/trabajadoras/:id', authAdmin, (req, res) => {
   const prev = queries.getTrabajadoraById.get(req.params.id);
   if (!prev) return res.status(404).json({ error: 'No encontrada' });
-  const { nombre, telefono, horas_dia, dias_mes, tipo_jornada, estado, observaciones, horas_pendientes_confirmar } = req.body;
+
+  const { nombre, telefono, horas_dia, dias_mes, tipo_jornada,
+          estado, observaciones, horas_pendientes_confirmar } = req.body;
+
   queries.updateTrabajadora.run({
     id: req.params.id,
     nombre:    nombre    ?? prev.nombre,
@@ -413,157 +337,274 @@ app.put('/api/admin/trabajadoras/:id', authAdmin, (req, res) => {
     observaciones: observaciones ?? prev.observaciones,
     pendiente: horas_pendientes_confirmar != null ? (horas_pendientes_confirmar ? 1 : 0) : prev.horas_pendientes_confirmar,
   });
-  queries.insertAudit.run(req.user.username, 'MODIFICACION_TRABAJADORA', 'trabajadoras', req.params.id, JSON.stringify(prev), JSON.stringify(req.body));
+
+  queries.insertAudit.run(req.user.username, 'MODIFICACION_TRABAJADORA', 'trabajadoras',
+    req.params.id, JSON.stringify(prev), JSON.stringify(req.body));
+
   res.json({ mensaje: 'Actualizado correctamente' });
 });
 
+// POST /api/admin/trabajadoras/:id/reset-pin — resetear PIN
+app.post('/api/admin/trabajadoras/:id/reset-pin', authAdmin, async (req, res) => {
+  const { nuevo_pin } = req.body;
+  if (!nuevo_pin || String(nuevo_pin).length !== 4) {
+    return res.status(400).json({ error: 'El PIN debe tener exactamente 4 dígitos' });
+  }
+  const hash = await bcrypt.hash(String(nuevo_pin), 10);
+  queries.updatePin.run(hash, req.params.id);
+  queries.insertAudit.run(req.user.username, 'RESET_PIN', 'trabajadoras', req.params.id, null, null);
+  res.json({ mensaje: 'PIN actualizado' });
+});
+
+// DELETE /api/admin/trabajadoras/:id — dar de baja (soft delete)
 app.delete('/api/admin/trabajadoras/:id', authAdmin, (req, res) => {
   const prev = queries.getTrabajadoraById.get(req.params.id);
   if (!prev) return res.status(404).json({ error: 'No encontrada' });
   queries.deactivateTrabajadora.run(req.params.id);
-  queries.insertAudit.run(req.user.username, 'BAJA_TRABAJADORA', 'trabajadoras', req.params.id, JSON.stringify(prev), null);
+  queries.insertAudit.run(req.user.username, 'BAJA_TRABAJADORA', 'trabajadoras',
+    req.params.id, JSON.stringify(prev), JSON.stringify({ activa: 0 }));
   res.json({ mensaje: 'Trabajadora dada de baja' });
 });
 
+// GET /api/admin/fichajes — historial con filtros
 app.get('/api/admin/fichajes', authAdmin, (req, res) => {
   const { empresa_id, trabajadora_id, fecha_inicio, fecha_fin } = req.query;
-  res.json(queries.getHistorialRango.all({
-    empresa_id:     empresa_id     ? parseInt(empresa_id)     : null,
+  const fichajes = queries.getHistorialRango.all({
+    empresa_id:    empresa_id    ? parseInt(empresa_id)    : null,
     trabajadora_id: trabajadora_id ? parseInt(trabajadora_id) : null,
-    fecha_inicio:   fecha_inicio   || null,
-    fecha_fin:      fecha_fin      || null,
-  }));
+    fecha_inicio:  fecha_inicio  || null,
+    fecha_fin:     fecha_fin     || null,
+  });
+  res.json(fichajes);
 });
 
-app.delete('/api/admin/fichajes/:id', authAdmin, (req, res) => {
-  const prev = queries.getFichajeById.get(req.params.id);
-  if (!prev) return res.status(404).json({ error: 'Fichaje no encontrado' });
-  db.prepare('DELETE FROM fichajes WHERE id=?').run(req.params.id);
-  queries.insertAudit.run(req.user.username, 'BORRAR_FICHAJE', 'fichajes', req.params.id, JSON.stringify(prev), null);
-  res.json({ ok: true, mensaje: 'Fichaje eliminado correctamente.' });
-});
-
+// PUT /api/admin/fichajes/:id — corregir fichaje (solo admin, con auditoría)
 app.put('/api/admin/fichajes/:id', authAdmin, (req, res) => {
   const prev = queries.getFichajeById.get(req.params.id);
   if (!prev) return res.status(404).json({ error: 'Fichaje no encontrado' });
+
   const { hora_entrada, hora_salida, observaciones, razon } = req.body;
-  if (!razon || razon.trim().length < 5)
-    return res.status(400).json({ error: 'El motivo de la corrección es obligatorio (mín. 5 caracteres)' });
 
-  const entradaFinal = hora_entrada ?? prev.hora_entrada;
-  const salidaFinal  = hora_salida  ?? prev.hora_salida;
-  const horas = (entradaFinal && salidaFinal) ? calcularHorasTrabajadas(entradaFinal, salidaFinal) : prev.horas_trabajadas;
+  if (!razon || razon.trim().length < 5) {
+    return res.status(400).json({ error: 'Es obligatorio indicar el motivo de la corrección (mín. 5 caracteres)' });
+  }
 
-  queries.updateFichaje.run({ id: req.params.id, hora_entrada: entradaFinal, hora_salida: salidaFinal, horas_trabajadas: horas, observaciones: observaciones ?? prev.observaciones, admin: req.user.username, modificado_en: nowDB(), razon: razon.trim() });
-  queries.insertAudit.run(req.user.username, 'CORRECCION_FICHAJE', 'fichajes', req.params.id, JSON.stringify(prev), JSON.stringify(req.body));
+  let horas = prev.horas_trabajadas;
+  const entradaFinal  = hora_entrada ?? prev.hora_entrada;
+  const salidaFinal   = hora_salida  ?? prev.hora_salida;
+
+  if (entradaFinal && salidaFinal) {
+    horas = calcularHorasTrabajadas(entradaFinal, salidaFinal);
+  }
+
+  queries.updateFichaje.run({
+    id: req.params.id,
+    hora_entrada:    entradaFinal,
+    hora_salida:     salidaFinal,
+    horas_trabajadas: horas,
+    observaciones:   observaciones ?? prev.observaciones,
+    admin:           req.user.username,
+    modificado_en:   nowMadrid(),
+    razon:           razon.trim(),
+  });
+
+  queries.insertAudit.run(req.user.username, 'CORRECCION_FICHAJE', 'fichajes',
+    req.params.id, JSON.stringify(prev), JSON.stringify(req.body));
+
   res.json({ mensaje: 'Fichaje corregido' });
 });
 
+// GET /api/admin/informe-pdf/:trabajadora_id/:anio/:mes — exportar PDF registro de jornada
 app.get('/api/admin/informe-pdf/:trabajadora_id/:anio/:mes', authAdmin, (req, res) => {
   const { trabajadora_id, anio, mes } = req.params;
-  const periodo  = `${anio}-${String(mes).padStart(2, '0')}`;
+  const periodo = `${anio}-${String(mes).padStart(2, '0')}`;
   const fichajes = queries.getInformeMensual.all(trabajadora_id, periodo);
-  if (!fichajes.length) return res.status(404).json({ error: 'Sin registros para ese periodo' });
 
-  const info      = fichajes[0];
+  if (!fichajes.length) {
+    return res.status(404).json({ error: 'Sin registros para ese periodo' });
+  }
+
+  const info = fichajes[0];
   const mesNombre = new Date(`${periodo}-01`).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-  const doc       = new PDFDoc({ margin: 40, size: 'A4' });
 
+  const doc = new PDFDoc({ margin: 40, size: 'A4' });
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="registro_jornada_${info.dni}_${periodo}.pdf"`);
+  res.setHeader('Content-Disposition',
+    `attachment; filename="registro_jornada_${info.dni}_${periodo}.pdf"`);
   doc.pipe(res);
 
-  doc.fontSize(14).font('Helvetica-Bold').text('REGISTRO DE JORNADA', { align: 'center' });
-  doc.fontSize(9).font('Helvetica').text('(Art. 34.9 Estatuto de los Trabajadores — RD-ley 8/2019)', { align: 'center' });
+  // ── Cabecera ──
+  doc.fontSize(14).font('Helvetica-Bold')
+     .text('REGISTRO DE JORNADA', { align: 'center' });
+  doc.fontSize(9).font('Helvetica')
+     .text('(Art. 34.9 Estatuto de los Trabajadores — RD-ley 8/2019)', { align: 'center' });
+  doc.moveDown(0.5);
+
+  doc.moveTo(40, doc.y).lineTo(555, doc.y).stroke();
+  doc.moveDown(0.3);
+
+  // ── Datos empresa/trabajadora ──
+  const col1 = 40, col2 = 300;
+  doc.fontSize(9).font('Helvetica-Bold').text('EMPRESA:', col1, doc.y, { continued: true })
+     .font('Helvetica').text(` ${info.empresa_nombre}`);
+  doc.fontSize(9).font('Helvetica-Bold').text('NIF/CIF:', col1, doc.y, { continued: true })
+     .font('Helvetica').text(` ${info.empresa_nif}`);
+  doc.fontSize(9).font('Helvetica-Bold').text('CCC:', col1, doc.y, { continued: true })
+     .font('Helvetica').text(` ${info.ccc}`);
+  doc.moveDown(0.3);
+
+  const y2 = doc.y;
+  doc.fontSize(9).font('Helvetica-Bold').text('TRABAJADORA/OR:', col1, y2, { continued: true })
+     .font('Helvetica').text(` ${info.trabajadora_nombre}`);
+  doc.fontSize(9).font('Helvetica-Bold').text('DNI/NIE:', col1, doc.y, { continued: true })
+     .font('Helvetica').text(` ${info.dni}`);
+  doc.fontSize(9).font('Helvetica-Bold').text('TIPO JORNADA:', col1, doc.y, { continued: true })
+     .font('Helvetica').text(` ${info.tipo_jornada === 'completa' ? 'Tiempo completo' : 'Tiempo parcial'}`);
+  doc.fontSize(9).font('Helvetica-Bold').text('PERÍODO:', col1, doc.y, { continued: true })
+     .font('Helvetica').text(` ${mesNombre.charAt(0).toUpperCase() + mesNombre.slice(1)}`);
+
   doc.moveDown(0.5);
   doc.moveTo(40, doc.y).lineTo(555, doc.y).stroke();
   doc.moveDown(0.3);
 
-  const col1 = 40;
-  doc.fontSize(9).font('Helvetica-Bold').text('EMPRESA:', col1, doc.y, { continued: true }).font('Helvetica').text(` ${info.empresa_nombre}`);
-  doc.fontSize(9).font('Helvetica-Bold').text('NIF/CIF:', col1, doc.y, { continued: true }).font('Helvetica').text(` ${info.empresa_nif}`);
-  doc.fontSize(9).font('Helvetica-Bold').text('CCC:', col1, doc.y, { continued: true }).font('Helvetica').text(` ${info.ccc}`);
-  doc.moveDown(0.3);
-  doc.fontSize(9).font('Helvetica-Bold').text('TRABAJADORA/OR:', col1, doc.y, { continued: true }).font('Helvetica').text(` ${info.trabajadora_nombre}`);
-  doc.fontSize(9).font('Helvetica-Bold').text('DNI/NIE:', col1, doc.y, { continued: true }).font('Helvetica').text(` ${info.dni}`);
-  doc.fontSize(9).font('Helvetica-Bold').text('TIPO JORNADA:', col1, doc.y, { continued: true }).font('Helvetica').text(` ${info.tipo_jornada === 'completa' ? 'Tiempo completo' : 'Tiempo parcial'}`);
-  doc.fontSize(9).font('Helvetica-Bold').text('PERÍODO:', col1, doc.y, { continued: true }).font('Helvetica').text(` ${mesNombre.charAt(0).toUpperCase() + mesNombre.slice(1)}`);
-  doc.moveDown(0.5);
-  doc.moveTo(40, doc.y).lineTo(555, doc.y).stroke();
-  doc.moveDown(0.3);
+  // ── Tabla de fichajes ──
+  const colWidths = [70, 75, 75, 60, 225];
+  const headers   = ['FECHA', 'ENTRADA', 'SALIDA', 'HORAS', 'OBSERVACIONES'];
+  const colX      = [40, 110, 185, 260, 320];
 
-  const colX = [40, 110, 185, 260, 320];
-  const colW = [70, 75, 75, 60, 225];
-  const hdrs = ['FECHA', 'ENTRADA', 'SALIDA', 'HORAS', 'OBSERVACIONES'];
+  // Cabecera tabla
   doc.fontSize(8).font('Helvetica-Bold');
-  hdrs.forEach((h, i) => doc.text(h, colX[i], doc.y, { width: colW[i] }));
+  headers.forEach((h, i) => doc.text(h, colX[i], doc.y, { width: colWidths[i] }));
   doc.moveDown(0.2);
   doc.moveTo(40, doc.y).lineTo(555, doc.y).stroke();
   doc.moveDown(0.1);
 
-  let totalHoras = 0, diasTrabajados = 0;
+  // Filas
+  let totalHoras = 0;
+  let diasTrabajados = 0;
+
   doc.font('Helvetica').fontSize(8);
   fichajes.forEach(f => {
     const y = doc.y;
-    const fechaStr = new Date(f.fecha + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const fechaStr = new Date(f.fecha + 'T12:00:00').toLocaleDateString('es-ES', {
+      weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric',
+    });
+
     let horasStr = '';
-    if (f.horas_trabajadas != null) { horasStr = decimalToHHMM(f.horas_trabajadas); totalHoras += f.horas_trabajadas; diasTrabajados++; }
-    const obs = [f.cerrado_automaticamente ? 'Cierre auto.' : '', f.observaciones || '', f.modificado_por ? `Corr: ${f.razon_modificacion || ''}` : ''].filter(Boolean).join('; ');
-    doc.text(fechaStr, colX[0], y, { width: colW[0] });
-    doc.text(horaDisplay(f.hora_entrada), colX[1], y, { width: colW[1] });
-    doc.text(horaDisplay(f.hora_salida),  colX[2], y, { width: colW[2] });
-    doc.text(horasStr,  colX[3], y, { width: colW[3] });
-    doc.text(obs,       colX[4], y, { width: colW[4] });
+    if (f.horas_trabajadas != null) {
+      horasStr = decimalToHHMM(f.horas_trabajadas);
+      totalHoras += f.horas_trabajadas;
+      diasTrabajados++;
+    }
+
+    const obs = [];
+    if (f.cerrado_automaticamente) obs.push('Cierre auto.');
+    if (f.observaciones) obs.push(f.observaciones);
+    if (f.modificado_por) obs.push(`Corr.admin: ${f.razon_modificacion || ''}`);
+
+    doc.text(fechaStr,        colX[0], y, { width: colWidths[0] });
+    doc.text(horaDisplay(f.hora_entrada), colX[1], y, { width: colWidths[1] });
+    doc.text(horaDisplay(f.hora_salida),  colX[2], y, { width: colWidths[2] });
+    doc.text(horasStr,        colX[3], y, { width: colWidths[3] });
+    doc.text(obs.join('; '),  colX[4], y, { width: colWidths[4] });
+
     doc.moveDown(0.15);
-    if (doc.y > 750) doc.addPage();
+
+    if (doc.y > 750) {
+      doc.addPage();
+    }
   });
 
+  // Totales
   doc.moveDown(0.3);
   doc.moveTo(40, doc.y).lineTo(555, doc.y).stroke();
   doc.moveDown(0.2);
   doc.fontSize(9).font('Helvetica-Bold');
-  doc.text(`Días trabajados: ${diasTrabajados}`, col1);
-  doc.text(`TOTAL HORAS MES: ${decimalToHHMM(totalHoras)} (${Math.round(totalHoras * 100) / 100}h)`, col1);
+  doc.text(`Días trabajados: ${diasTrabajados}`, colX[0]);
+  doc.text(`TOTAL HORAS MES: ${decimalToHHMM(totalHoras)} (${Math.round(totalHoras * 100) / 100}h)`,
+           colX[0]);
+
+  // Jornada contrato
+  const jornadaContrato = fichajes[0]?.horas_dia;
+  if (jornadaContrato) {
+    const expectedHoras = jornadaContrato * diasTrabajados;
+    const diff = Math.round((totalHoras - expectedHoras) * 100) / 100;
+    doc.font('Helvetica').fontSize(8)
+       .text(`Horas contrato/día: ${decimalToHHMM(jornadaContrato)} · Esperadas este período: ${decimalToHHMM(expectedHoras)} · Diferencia: ${diff >= 0 ? '+' : ''}${decimalToHHMM(Math.abs(diff))}`);
+  }
+
+  // Pie legal
   doc.moveDown(1);
   doc.moveTo(40, doc.y).lineTo(555, doc.y).stroke();
   doc.moveDown(0.3);
-  doc.fontSize(7).font('Helvetica').text('Registro generado por sistema de control horario Webgest. Conservación mínima 4 años (art. 34.9 ET). Disponible para trabajadoras, representantes y la ITSS.', { align: 'justify' });
+  doc.fontSize(7).font('Helvetica')
+     .text('Este registro ha sido generado automáticamente por el sistema de control horario de Webgest. ' +
+           'Se conservará durante un mínimo de 4 años conforme al art. 34.9 ET. ' +
+           'Disponible para la persona trabajadora, sus representantes legales y la Inspección de Trabajo.',
+           { align: 'justify' });
+
+  // Firma
   doc.moveDown(2);
-  doc.fontSize(8).text('Firma de la empresa:', 40).text('Firma de la trabajadora/or:', 300);
+  doc.fontSize(8)
+     .text('Firma de la empresa:', 40)
+     .text('Firma de la trabajadora/or:', 300);
+
   doc.end();
 });
 
-app.get('/api/admin/audit', authAdmin, (req, res) =>
-  res.json(db.prepare('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 200').all()));
+// GET /api/admin/audit — log de auditoría
+app.get('/api/admin/audit', authAdmin, (req, res) => {
+  const rows = db.prepare(`
+    SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 200
+  `).all();
+  res.json(rows);
+});
 
-// ─── CRON JOB ────────────────────────────────────────────────────────────────────
+// ─── CRON JOB — AUTOCIERRE DE JORNADA ────────────────────────────────────────────
 
 cron.schedule('* * * * *', () => {
   const abiertos = queries.getFichajesAbiertos.all();
-  const ahora    = new Date();
+  const ahora = new Date();
+
   abiertos.forEach(f => {
-    const pausaActiva  = queries.getPausaActiva.get(f.id);
-    const ahora_db     = nowDB();
-    const totalPausasH = queries.getTotalPausasH.get(ahora_db, f.id).total;
-    const deficit      = calcularDeficitMes(f.trabajadora_id, f.horas_dia);
-    const fin = calcularHoraFin(f.hora_entrada, f.horas_dia + deficit + totalPausasH);
-    if (ahora >= fin) {
-      if (pausaActiva) queries.cerrarPausa.run(nowDB(), f.id);
-      const salidaISO = fin.toISOString().replace('T', ' ').slice(0, 19);
-      queries.closeFichaje.run(salidaISO, calcularHorasTrabajadas(f.hora_entrada, salidaISO), 1, f.id);
-      console.log(`[CRON] Cierre automático: ${f.trabajadora_nombre} a las ${horaDisplay_Madrid(fin)}${deficit > 0 ? ` (+${decimalToHHMM(deficit)} compensación)` : ''}`);
-      smsFin(f.telefono, fin);
+    const finPrevisto = calcularHoraFin(f.hora_entrada, f.horas_dia);
+    if (ahora >= finPrevisto) {
+      // Convertir el fin previsto a hora local Madrid (no toISOString que devuelve UTC)
+      const salidaISO = finPrevisto.toLocaleString('sv-SE', { timeZone: 'Europe/Madrid' }).slice(0, 19);
+      const horas = calcularHorasTrabajadas(f.hora_entrada, salidaISO);
+
+      queries.closeFichaje.run(salidaISO, horas, 1, f.id);
+
+      const horaDisplay = finPrevisto.toLocaleTimeString('es-ES', {
+        timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit',
+      });
+
+      console.log(`[CRON] Jornada cerrada automáticamente: ${f.trabajadora_nombre} a las ${horaDisplay}`);
+
+      // Enviar SMS
+      smsFin(f.telefono, finPrevisto);
     }
   });
 });
 
-// ─── SPA FALLBACK ────────────────────────────────────────────────────────────────
+// ─── RUTAS SPA (fallback) ────────────────────────────────────────────────────────
 
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
-app.get('*',     (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-// ─── ARRANCAR ────────────────────────────────────────────────────────────────────
+// ─── ARRANCAR SERVIDOR ───────────────────────────────────────────────────────────
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Control Horario Webgest en http://0.0.0.0:${PORT}`);
+app.listen(PORT, () => {
+  console.log(`✅ Control Horario Webgest corriendo en http://localhost:${PORT}`);
+  console.log(`   Panel trabajadora: http://localhost:${PORT}/`);
+  console.log(`   Panel admin:       http://localhost:${PORT}/admin`);
+  console.log(`   Zona horaria:      ${process.env.TZ}`);
 });
+
+// ─── HELPERS locales ────────────────────────────────────────────────────────────
+
+function defaultPin(dni) {
+  const digits = dni.replace(/[^0-9]/g, '');
+  return digits.length >= 4 ? digits.slice(-4) : '1234';
+}
